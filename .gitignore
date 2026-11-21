@@ -1,0 +1,7 @@
+node_modules/
+.env
+.aio
+dist/
+.parcel-cache/
+*.log
+console.json

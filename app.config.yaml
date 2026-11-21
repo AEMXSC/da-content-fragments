@@ -1,0 +1,23 @@
+application:
+  runtimeManifest:
+    packages:
+      da-cf:
+        license: Apache-2.0
+        actions:
+          cf:
+            function: actions/cf/index.js
+            web: 'yes'
+            runtime: nodejs:22
+            limits:
+              timeout: 30000
+              memorySize: 256
+            inputs:
+              LOG_LEVEL: warn
+              # comma-separated origin regexes; empty = da.live, *--*--*.aem.page|live, localhost
+              ALLOWED_ORIGINS: $ALLOWED_ORIGINS
+            annotations:
+              # the action checks the token itself (discovery + AEM); App Builder's own auth check
+              # would accept only tokens from this project's credentials, not the DA user's token
+              require-adobe-auth: false
+              web-custom-options: true
+              final: true
