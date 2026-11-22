@@ -13,7 +13,7 @@ import { applyToPage } from './apply.js';
 import openAdvisor from './advisor.js';
 import runSetup from './setup.js';
 import { starterTemplate } from './starter.js';
-import el from './ui.js';
+import el, { icon } from './ui.js';
 
 // the shared broker deployment (one App Builder action serves every site); setup can change it
 const DEFAULT_BROKER = 'https://3635370-dacontentfragments-stage.adobeioruntime.net/api/v1/web/da-cf/cf';
@@ -110,7 +110,7 @@ async function openEditor(ref, fragment, host) {
     });
   };
   const apply = el('button', {
-    type: 'button', text: 'Apply to page', hidden: true, title: 'Click inside this block in the editor first',
+    type: 'button', class: 'nx-btn-primary', text: 'Apply to page', hidden: true, title: 'Click inside this block in the editor first',
     onclick: async () => {
       apply.disabled = true;
       try {
@@ -130,7 +130,7 @@ async function openEditor(ref, fragment, host) {
       let input;
       if (editable(f)) {
         input = el(f.type === 'long-text' ? 'textarea' : 'input', {
-          id, name: f.name, rows: f.type === 'long-text' ? 4 : null,
+          id, name: f.name, class: 'nx-input', rows: f.type === 'long-text' ? 4 : null,
           oninput: (e) => { draft[f.name] = e.target.value; clearTimeout(timer); timer = setTimeout(preview, 350); },
         });
         input.value = value;
@@ -140,7 +140,7 @@ async function openEditor(ref, fragment, host) {
       form.append(el('label', { for: id, text: f.label || f.name }), input);
     });
     const save = el('button', {
-      type: 'button', class: 'primary', text: 'Save to AEM',
+      type: 'button', class: 'nx-btn-accent', text: 'Save to AEM',
       onclick: async () => {
         const ops = fieldPatch(snapshot.data.fields, draft);
         if (!ops.length) { say('No changes to save.'); return; }
@@ -160,17 +160,17 @@ async function openEditor(ref, fragment, host) {
       },
     });
     const reset = el('button', {
-      type: 'button', text: 'Discard', onclick: () => { draft = {}; draw(); preview(); },
+      type: 'button', class: 'nx-action-btn-quiet', text: 'Discard', onclick: () => { draft = {}; draw(); preview(); },
     });
     host.replaceChildren(
-      el('div', { class: 'row' }, el('label', { for: 'variation', text: 'Variation' }), el('select', {
-        id: 'variation',
+      el('div', { class: 'field' }, el('label', { for: 'variation', text: 'Variation' }), el('select', {
+        id: 'variation', class: 'nx-input',
         onchange: async (e) => { current = e.target.value; draft = {}; snapshot = await broker.get(fragment.id, current); draw(); preview(); },
       }, variations.map((v) => el('option', { value: v.name, selected: v.name === current, text: v.title || v.name })))),
       form,
       el('div', { class: 'actions' }, save, apply, reset, el('a', {
-        href: editorUrl(fragment.id), target: '_blank', rel: 'noopener noreferrer', text: 'Open in AEM',
-      })),
+        class: 'nx-action-btn', href: editorUrl(fragment.id), target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Open in AEM (opens in a new tab)',
+      }, icon('openin'), 'Open in AEM')),
       tpl ? el('p', { class: 'muted', text: 'The preview updates as you type. Nothing is saved until "Save to AEM".' })
         : el('p', { class: 'muted', text: 'This model has no template: preview updates are off.' }),
     );
@@ -181,7 +181,12 @@ async function openEditor(ref, fragment, host) {
 
 function row(ref) {
   const name = ref.path.split('/').pop();
-  const light = el('span', { class: 'light', 'data-tone': 'unknown', role: 'img', 'aria-label': 'Checking publication' });
+  const light = el('span', { class: 'light', 'data-tone': 'unknown' }, el('i', { 'aria-hidden': 'true' }), el('span', { text: 'Checking…' }));
+  const setLight = (tone, label, title) => {
+    light.dataset.tone = tone;
+    light.lastChild.textContent = label;
+    if (title) light.title = title;
+  };
   const body = el('div', { class: 'body', hidden: true });
   let fragment;
   const toggle = el('button', {
@@ -195,16 +200,14 @@ function row(ref) {
         openEditor(ref, fragment, body).catch((e) => { body.replaceChildren(el('p', { class: 'error', text: e.message })); });
       }
     },
-  }, el('strong', { text: name }), el('span', { class: 'variation', text: ref.variation === 'master' ? 'Main' : ref.variation }));
+  }, icon('chevrondown'), el('span', { class: 'name-text' }, el('strong', { text: name }), el('span', { class: 'variation', text: ref.variation === 'master' ? 'Main' : ref.variation })));
   broker.byPath(ref.path).then((f) => {
     fragment = f;
-    if (!f) { light.dataset.tone = 'off'; light.setAttribute('aria-label', 'Not found in AEM'); return; }
-    const s = statusOf(f);
-    light.dataset.tone = s.tone;
-    light.setAttribute('aria-label', s.label);
-    light.title = `${s.label} · ${f.id}`;
-  }).catch((e) => { light.dataset.tone = 'unknown'; light.title = e.message; say(e.message, 'error'); });
-  return el('li', { class: 'ref' }, el('div', { class: 'head' }, light, toggle), el('p', { class: 'path', text: ref.path }), body);
+    if (!f) { setLight('off', 'Not found in AEM'); return; }
+    const st = statusOf(f);
+    setLight(st.tone, st.label, f.id);
+  }).catch((e) => { setLight('unknown', 'Unavailable', e.message); say(e.message, 'error'); });
+  return el('li', { class: 'ref' }, toggle, el('div', { class: 'meta' }, light, el('span', { class: 'path', text: ref.path })), body);
 }
 
 // the editor's live document, when the host sends one (within ~2 s of subscribing)
@@ -291,6 +294,7 @@ async function init() {
       if (refsKey(refs) !== shownKey) drawRefs(refs); // a fragment section was added or removed
     }, 600);
   };
+  $('#browse').prepend(icon('add'));
   $('#browse').onclick = () => actions.showPanel?.('content-advisor');
   channel?.addEventListener('message', ({ origin, data }) => {
     if (origin !== window.location.origin || data?.page !== page) return;

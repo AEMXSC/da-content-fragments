@@ -10,3 +10,20 @@ export default function el(tag, attrs = {}, ...kids) {
   kids.flat().filter(Boolean).forEach((k) => n.append(k));
   return n;
 }
+
+const SVG = 'http://www.w3.org/2000/svg';
+const ICONS = new URL('./img/icons/', import.meta.url).href;
+
+/** an S2 workflow icon (img/icons/s2-icon-<name>-20-n.svg), decorative */
+export function icon(name) {
+  const svg = document.createElementNS(SVG, 'svg');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS(SVG, 'use');
+  use.setAttribute('href', `${ICONS}s2-icon-${name}-20-n.svg#icon`);
+  svg.append(use);
+  const span = document.createElement('span');
+  span.className = 'icon';
+  span.append(svg);
+  return span;
+}

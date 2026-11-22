@@ -6,7 +6,10 @@
     <meta name="referrer" content="no-referrer">
     <title>Content Fragments</title>
     <link rel="icon" href="data:,">
+    <!-- Experience Workspace style guide: Spectrum 2 tokens, Adobe Clean, buttons, fields -->
     <link rel="stylesheet" href="https://da.live/nx2/styles/styles.css">
+    <link rel="stylesheet" href="https://da.live/nx2/styles/buttons.css">
+    <link rel="stylesheet" href="https://da.live/nx2/styles/form.css">
     <link rel="stylesheet" href="./panel.css">
     <script type="module" src="./panel.js"></script>
   </head>
@@ -15,7 +18,7 @@
       <header>
         <div class="top">
           <p class="eyebrow">AEM Content Fragments</p>
-          <button id="setup-open" type="button" class="link" hidden>Setup</button>
+          <button id="setup-open" type="button" class="nx-action-btn-quiet nx-btn-sm" hidden>Setup</button>
         </div>
         <h1>On this page <span id="count" class="count">0</span></h1>
         <p class="muted">Author content from <span id="author">AEM</span>, read and saved through the broker.</p>
@@ -23,15 +26,15 @@
       <p id="status" role="status" aria-live="polite"></p>
       <section id="setup" class="setup" hidden></section>
       <ul id="refs" class="refs"></ul>
-      <section class="place" aria-labelledby="place-title">
+      <section class="place card" aria-labelledby="place-title">
         <h2 id="place-title">Place a Content Fragment</h2>
         <p class="muted">Put the cursor on an empty line between sections, then pick fragments. Each one is added as its own section.</p>
-        <div class="actions"><button id="browse" type="button" aria-haspopup="dialog">Browse with Content Advisor</button></div>
+        <div class="actions"><button id="browse" type="button" class="nx-action-btn" aria-haspopup="dialog">Browse with Content Advisor</button></div>
       </section>
       <div id="advisor" hidden></div>
       <div id="advisor-actions" class="actions" hidden>
-        <button id="advisor-cancel" type="button">Cancel</button>
-        <button id="advisor-insert" type="button" class="primary" disabled>Insert</button>
+        <button id="advisor-cancel" type="button" class="nx-action-btn-quiet">Cancel</button>
+        <button id="advisor-insert" type="button" class="nx-btn-accent" disabled>Insert</button>
       </div>
     </main>
   </body>

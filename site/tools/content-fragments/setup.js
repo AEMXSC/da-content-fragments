@@ -57,7 +57,7 @@ function previewFrame(html) {
 function modelCard(model, sample, existing, broker, base) {
   const keepFile = !!existing?.template && !existing?.html;
   const use = el('input', { type: 'checkbox', checked: !keepFile });
-  const area = el('textarea', { rows: 5, spellcheck: 'false', value: existing?.html || starterTemplate(model) });
+  const area = el('textarea', { class: 'nx-input code', rows: 5, spellcheck: 'false', value: existing?.html || starterTemplate(model) });
   const out = el('div', { class: 'sample' });
   const draw = async () => {
     if (!sample) { out.replaceChildren(el('p', { class: 'muted', text: 'No fragment of this model in the folder to preview.' })); return; }
@@ -72,12 +72,12 @@ function modelCard(model, sample, existing, broker, base) {
   const fields = (model.fields || []).map((f) => f.label || f.name).join(', ');
   const card = el(
     'li',
-    { class: 'model' },
-    el('label', { class: 'row' }, use, el('strong', { text: model.title || model.name })),
+    { class: 'model card' },
+    el('label', { class: 'check' }, use, el('strong', { text: model.title || model.name })),
     el('p', { class: 'path', text: `${model.path} · ${fields}` }),
     keepFile ? el('p', { class: 'muted', text: `Uses the template file ${existing.template}. Tick to replace it with this one.` }) : null,
     el('details', { open: !keepFile }, el('summary', { text: 'Template' }), area, el('div', { class: 'actions' }, el('button', {
-      type: 'button', text: 'Reset to starter', onclick: () => { area.value = starterTemplate(model); draw(); },
+      type: 'button', class: 'nx-action-btn-quiet', text: 'Reset to starter', onclick: () => { area.value = starterTemplate(model); draw(); },
     }))),
     out,
   );
@@ -103,20 +103,20 @@ export default async function runSetup({
   const authors = await listAuthors(token);
   if (!authors.length) throw new Error('Your account has no AEM Cloud Service author in repository discovery.');
   say('');
-  const author = el('select', { id: 'setup-author' }, authors.map((a) => el('option', {
+  const author = el('select', { id: 'setup-author', class: 'nx-input' }, authors.map((a) => el('option', {
     value: a.id, selected: a.id === s.author, disabled: a.hibernated, text: `${a.label}${a.hibernated ? ' (hibernated)' : ''}`,
   })));
-  const folder = el('input', { id: 'setup-folder', value: s['advisor-folder'] || `/content/dam/${context.repo}` });
-  const brokerUrl = el('input', { id: 'setup-broker', value: s.broker || defaultBroker });
-  const tenant = el('input', { id: 'setup-tenant', value: s.tenant || '', placeholder: 'optional' });
-  const linkBase = el('input', { id: 'setup-link-base', value: s['link-base'] || '', placeholder: 'optional, e.g. https://www.example.com' });
-  const list = el('ul', { class: 'refs' });
-  const save = el('button', { type: 'button', class: 'primary', text: 'Save setup', disabled: true });
+  const folder = el('input', { id: 'setup-folder', class: 'nx-input', value: s['advisor-folder'] || `/content/dam/${context.repo}` });
+  const brokerUrl = el('input', { id: 'setup-broker', class: 'nx-input', value: s.broker || defaultBroker });
+  const tenant = el('input', { id: 'setup-tenant', class: 'nx-input', value: s.tenant || '', placeholder: 'optional' });
+  const linkBase = el('input', { id: 'setup-link-base', class: 'nx-input', value: s['link-base'] || '', placeholder: 'optional, e.g. https://www.example.com' });
+  const list = el('ul', { class: 'models' });
+  const save = el('button', { type: 'button', class: 'nx-btn-accent', text: 'Save setup', disabled: true });
   let cards = [];
 
   const find = el('button', {
     type: 'button',
-    class: 'primary',
+    class: 'nx-btn-primary',
     text: 'Find models',
     onclick: async () => {
       if (!DAM.test(folder.value.trim())) { say('The folder must start with /content/dam/.', 'error'); return; }
@@ -159,28 +159,30 @@ export default async function runSetup({
   host.replaceChildren(
     el('h2', { text: 'Set up Content Fragments' }),
     el('p', { class: 'muted', text: 'Connect this site to AEM once. Everyone who opens the panel afterwards uses this setup.' }),
-    el('h3', { text: '1. AEM author' }),
-    el('label', { for: 'setup-author', text: 'Environment' }),
-    author,
-    el('label', { for: 'setup-folder', text: 'Content Fragment folder' }),
-    folder,
     el(
-      'details',
-      {},
-      el('summary', { text: 'More settings' }),
-      el('label', { for: 'setup-broker', text: 'Broker (App Builder action URL)' }),
-      brokerUrl,
-      el('label', { for: 'setup-tenant', text: 'Experience Cloud tenant, for "Open in AEM" links' }),
-      tenant,
+      'section',
+      { class: 'card step' },
+      el('h3', { text: '1. AEM author' }),
+      el('label', { for: 'setup-author', text: 'Environment' }),
+      author,
+      el('label', { for: 'setup-folder', text: 'Content Fragment folder' }),
+      folder,
+      el(
+        'details',
+        {},
+        el('summary', { text: 'More settings' }),
+        el('label', { for: 'setup-broker', text: 'Broker (App Builder action URL)' }),
+        brokerUrl,
+        el('label', { for: 'setup-tenant', text: 'Experience Cloud tenant, for "Open in AEM" links' }),
+        tenant,
       el('label', { for: 'setup-link-base', text: 'Link base: the site that serves root-relative fragment links' }),
-      linkBase,
+        linkBase,
+      ),
+      el('div', { class: 'actions' }, find),
     ),
-    el('div', { class: 'actions' }, find),
-    el('h3', { text: '2. Models and templates' }),
-    list,
-    el('h3', { text: '3. Save' }),
-    el('div', { class: 'actions' }, save, mode === 'edit' ? el('button', {
-      type: 'button', text: 'Cancel', onclick: () => window.location.reload(),
+    el('section', { class: 'step' }, el('h3', { text: '2. Models and templates' }), list),
+    el('div', { class: 'actions sticky' }, save, mode === 'edit' ? el('button', {
+      type: 'button', class: 'nx-action-btn-quiet', text: 'Cancel', onclick: () => window.location.reload(),
     }) : null),
   );
   host.hidden = false;

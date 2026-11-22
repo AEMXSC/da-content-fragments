@@ -64,7 +64,7 @@ export const editable = (field) => !field.locked && !field.multiple
 export function statusOf(fragment) {
   const s = String(fragment?.status || '').toUpperCase();
   if (s === 'PUBLISHED') return { tone: 'ok', label: 'Published' };
-  if (s === 'MODIFIED') return { tone: 'warn', label: 'Published, with changes not yet published' };
+  if (s === 'MODIFIED') return { tone: 'warn', label: 'Changes not published' };
   if (s === 'UNPUBLISHED' || s === 'DRAFT' || s === 'NEW') return { tone: 'off', label: 'Not published' };
   return { tone: 'unknown', label: s ? `Status: ${s.toLowerCase()}` : 'Publication unknown' };
 }
