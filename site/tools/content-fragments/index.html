@@ -34,7 +34,8 @@
         <p class="muted">Put the cursor on an empty line between sections, then pick fragments. Each one is added as its own section.</p>
         <div class="actions"><button id="browse" type="button" class="nx-action-btn" aria-haspopup="dialog">Browse with Content Advisor</button></div>
       </section>
-      <div id="advisor" hidden></div>
+      <p id="advisor-hint" class="note info" hidden>Put the cursor on an empty line between sections in the editor first. Each fragment you insert becomes its own section, rendered with its model's template.</p>
+      <div id="advisor" class="card advisor" hidden></div>
       <div id="advisor-actions" class="actions" hidden>
         <button id="advisor-cancel" type="button" class="nx-action-btn-quiet">Cancel</button>
         <button id="advisor-insert" type="button" class="nx-btn-accent" disabled>Insert</button>

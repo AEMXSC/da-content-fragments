@@ -135,5 +135,5 @@ export default async function openAdvisor({
       onDismiss: close,
     },
   });
-  say('Put the cursor on an empty line between sections, select fragments, then Insert.');
+  say(''); // the dialog's hint says where fragments go
 }

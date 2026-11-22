@@ -88,16 +88,24 @@ const card = (...kids) => el('section', { class: 'card step' }, ...kids);
 const fine = (text) => el('p', { class: 'muted', text });
 /** one environment row: name, host, state; a hibernated environment cannot be picked */
 function pickRow(a, current, pick) {
-  const meta = `${a.id}${a.hibernated ? ' · hibernated' : ''}${current ? ' · current' : ''}`;
+  const meta = `${a.id}${a.hibernated ? ' · hibernated' : ''}`;
   return el('li', {}, el(
     'button',
     {
       type: 'button', class: 'pick', disabled: a.hibernated, 'aria-current': current ? 'true' : false, onclick: () => pick(a),
     },
-    el('span', { class: 'pick-name', text: a.label }),
+    el('span', { class: 'pick-name' }, a.label, current ? el('span', { class: 'badge', text: 'Current' }) : null),
     el('span', { class: 'pick-meta', text: meta }),
   ));
 }
+/** a button that opens another step, reporting its error in the status line */
+function stepButton(cls, text, run, say) {
+  const fail = (e) => say(e.message, 'error');
+  return el('button', { type: 'button', class: cls, text, onclick: () => run().catch(fail) });
+}
+const note = (tone, text) => el('p', { class: `note ${tone}`, text });
+/** a term and its value, in the setup summary */
+const fact = (term, value, detail) => [el('dt', { text: term }), el('dd', {}, value, detail ? el('span', { class: 'pick-meta', text: detail }) : null)];
 const back = (onclick) => el('button', { type: 'button', class: 'nx-action-btn-quiet nx-btn-sm back', onclick }, 'Back');
 
 /**
@@ -129,7 +137,12 @@ export default async function runSetup({
   const show = (...kids) => { host.replaceChildren(...kids); host.hidden = false; };
   const broker = () => makeBroker({ url: state.broker, author: state.author });
   let authors = [];
-  const steps = {}; // the three cards; Back links between them
+  const steps = {}; // the cards; Back links between them
+  // nothing is written before Save; when the environment changes, say what that means
+  const switching = () => (s.author && state.author !== s.author
+    ? note('info', `Switching from ${s.author} to ${state.author}. Pages keep their fragment references, so those fragments must exist in the new environment. Nothing changes until you save.`)
+    : null);
+  const saveLabel = mode === 'edit' ? 'Save changes' : 'Save setup';
 
   // 3. review the models found in the folder, then save
   steps.models = async () => {
@@ -145,7 +158,7 @@ export default async function runSetup({
     const existing = (m) => config.models.find((x) => x.model === m.path || x.model === m.id);
     const cards = models.map((m, i) => modelCard(m, samples[i], existing(m), b, base));
     say('');
-    const save = el('button', { type: 'button', class: 'nx-btn-accent wide', text: 'Save setup' });
+    const save = el('button', { type: 'button', class: 'nx-btn-accent wide', text: saveLabel });
     save.onclick = async () => {
       save.disabled = true;
       save.textContent = 'Saving…';
@@ -156,11 +169,12 @@ export default async function runSetup({
         await saveConfig(context, token, mergeConfig(raw, { settings, models: cards.map((c) => c.value()).filter(Boolean), panelPath: window.location.pathname }));
         say('Setup saved. Reloading…', 'ok');
         setTimeout(() => window.location.reload(), 800);
-      } catch (e) { say(e.message, 'error'); save.disabled = false; save.textContent = 'Save setup'; }
+      } catch (e) { say(e.message, 'error'); save.disabled = false; save.textContent = saveLabel; }
     };
     show(card(
       back(() => steps.folder()),
       el('h2', { text: 'Review the templates' }),
+      switching(),
       el('p', { text: `${models.length} model${models.length > 1 ? 's' : ''} in ${state.folder}. ${INTRO_TEMPLATES}` }),
       el('ul', { class: 'models' }, cards.map((c) => c.card)),
       save,
@@ -213,6 +227,7 @@ export default async function runSetup({
     show(card(
       back(() => steps.author()),
       el('h2', { text: 'Choose the fragment folder' }),
+      switching(),
       el('p', { text: `Where this site's Content Fragments live in ${env?.label || state.author}. Models are found there, and Content Advisor opens there.` }),
       form,
     ));
@@ -232,25 +247,60 @@ export default async function runSetup({
     show(card(el('h2', { text: 'Connect AEM' }), fine('Loading your AEM environments…')));
     if (!authors.length) authors = await listAuthors(token);
     if (!authors.length) throw new Error('Your account has no AEM Cloud Service author in repository discovery.');
-    const pick = (a) => { state.author = a.id; steps.folder().catch((e) => say(e.message, 'error')); };
-    const rows = (q) => authors
+    const pick = (a) => {
+      if (a.id !== state.author) state.folder = ''; // another environment: its own folders
+      state.author = a.id;
+      steps.folder().catch((e) => say(e.message, 'error'));
+    };
+    // the saved environment first, then the rest
+    const ordered = [...authors.filter((a) => a.id === s.author), ...authors.filter((a) => a.id !== s.author)];
+    const rows = (q) => ordered
       .filter((a) => !q || `${a.label} ${a.program} ${a.id}`.toLowerCase().includes(q.toLowerCase()))
-      .map((a) => pickRow(a, a.id === state.author, pick));
+      .map((a) => pickRow(a, a.id === s.author, pick));
     const list = el('ul', { class: 'picks' }, rows(''));
     const onFilter = (e) => list.replaceChildren(...rows(e.target.value));
     const filter = authors.length > 6 ? el('input', {
       id: 'setup-filter', class: 'nx-input', type: 'search', placeholder: 'Filter environments', oninput: onFilter,
     }) : null;
     show(card(
+      mode === 'edit' ? back(() => steps.summary()) : null,
       el('h2', { text: 'Connect AEM' }),
       el('p', { text: `Pick the AEM author with this site's Content Fragments. Everyone who opens the panel on ${context.repo} uses it.` }),
       filter ? el('label', { for: 'setup-filter', class: 'sr-only', text: 'Filter environments' }) : null,
       filter,
       list,
       fine('These are the AEM Cloud Service authors your Adobe account can reach. Fragments are read and saved with your own permissions.'),
-      mode === 'edit' ? el('button', { type: 'button', class: 'nx-action-btn-quiet', text: 'Cancel', onclick: () => window.location.reload() }) : null,
     ));
   };
 
-  await steps.author();
+  // edit mode opens on the current setup, with a way to change each part
+  steps.summary = async () => {
+    say('');
+    if (!authors.length) authors = await listAuthors(token).catch(() => []);
+    const env = authors.find((a) => a.id === s.author);
+    const count = config.models.length;
+    const btn = (cls, text, run) => stepButton(cls, text, run, say);
+    show(card(
+      el('h2', { text: 'Connected to AEM' }),
+      el('p', { text: `Everyone who opens the panel on ${context.repo} uses this setup.` }),
+      el(
+        'dl',
+        { class: 'facts' },
+        ...fact('Environment', env?.label || s.author, env ? s.author : ''),
+        ...fact('Fragment folder', s['advisor-folder'] || 'Not set'),
+        ...fact('Templates', `${count} model${count === 1 ? '' : 's'} configured`),
+      ),
+      el(
+        'div',
+        { class: 'actions' },
+        s['advisor-folder'] ? btn('nx-btn-accent', 'Review templates', () => steps.models()) : null,
+        btn('nx-action-btn', 'Change folder', () => steps.folder()),
+        btn('nx-action-btn-quiet', 'Change environment', () => steps.author()),
+      ),
+      fine('Nothing changes until you save.'),
+      el('button', { type: 'button', class: 'nx-action-btn-quiet nx-btn-sm', text: 'Close', onclick: () => window.location.reload() }),
+    ));
+  };
+
+  await (mode === 'edit' ? steps.summary() : steps.author());
 }

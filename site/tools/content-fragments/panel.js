@@ -273,6 +273,8 @@ async function init() {
   $('#author').textContent = broker.author;
   if (new URLSearchParams(window.location.search).get('advisor') === '1') {
     document.body.classList.add('advisor-mode');
+    $('.title').textContent = 'Place Content Fragments';
+    $('#advisor-hint').hidden = false;
     await openAdvisor({
       sdk, author: broker.author, folder: config.settings['advisor-folder'], renderRef, say,
     });
