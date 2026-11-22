@@ -35,6 +35,19 @@ export default function createBroker({ url, author, getToken }) {
     author,
     byPath: async (path) => (await call('list', { path, limit: 1 })).data?.items?.find((f) => f.path === path) || null,
     list: async (path, limit = 50) => (await call('list', { path, limit })).data?.items || [],
+    /** DAM folders directly under `path` ([{ path, title }]), up to `pages` × 50 */
+    folders: async (path = '/content/dam', pages = 6) => {
+      const out = [];
+      let cursor;
+      for (let i = 0; i < pages; i += 1) {
+        // each page needs the previous cursor
+        const { data } = await call('folders', { path, cursor });
+        (data?.children || []).filter((c) => c.type === 'FOLDER').forEach((c) => out.push({ path: c.path, title: c.title || c.name }));
+        cursor = data?.cursor;
+        if (!cursor) break;
+      }
+      return out;
+    },
     get: (id, variation) => call('get', { id, variation }),
     variations: async (id) => (await call('variations', { id })).data?.items || [],
     model: async (model) => (await call('model', { model })).data,

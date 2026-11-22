@@ -10,7 +10,6 @@ import { listAuthors } from './discovery.js';
 import { starterTemplate } from './starter.js';
 import { render, fragmentData } from '../../scripts/cf-render.js';
 
-const DAM = /^\/content\/dam\/[A-Za-z0-9._\-/]+$/;
 const sheet = (rows) => ({
   total: rows.length, limit: rows.length, offset: 0, data: rows,
 });
@@ -84,7 +83,27 @@ function modelCard(model, sample, existing, broker, base) {
   return { card, value: () => (use.checked ? { model: model.path, label: model.title || model.name, html: area.value.trim() } : null) };
 }
 
+const INTRO_TEMPLATES = 'Each one gets a template: how its fragments render on the page. The starter is built from the model\'s fields; edit it here or later.';
+const card = (...kids) => el('section', { class: 'card step' }, ...kids);
+const fine = (text) => el('p', { class: 'muted', text });
+/** one environment row: name, host, state; a hibernated environment cannot be picked */
+function pickRow(a, current, pick) {
+  const meta = `${a.id}${a.hibernated ? ' · hibernated' : ''}${current ? ' · current' : ''}`;
+  return el('li', {}, el(
+    'button',
+    {
+      type: 'button', class: 'pick', disabled: a.hibernated, 'aria-current': current ? 'true' : false, onclick: () => pick(a),
+    },
+    el('span', { class: 'pick-name', text: a.label }),
+    el('span', { class: 'pick-meta', text: meta }),
+  ));
+}
+const back = (onclick) => el('button', { type: 'button', class: 'nx-action-btn-quiet nx-btn-sm back', onclick }, 'Back');
+
 /**
+ * Setup in three cards, one at a time (the ew-monday connect flow):
+ * 1. Connect AEM: the user's author environments as rows; 2. the fragment folder: the
+ * environment's DAM folders as a type-to-filter field; 3. review the models and save.
  * @param {object} o
  * @param {object} o.sdk DA SDK { context, token }
  * @param {HTMLElement} o.host where the wizard renders
@@ -93,97 +112,145 @@ function modelCard(model, sample, existing, broker, base) {
  * @param {(opts) => object} o.makeBroker ({ url, author }) → broker
  * @param {string} o.defaultBroker the shared broker deployment
  * @param {(msg, tone?) => void} o.say
+ * @param {'first'|'edit'} [o.mode]
  */
 export default async function runSetup({
   sdk, host, raw, config, makeBroker, defaultBroker, say, mode = 'first',
 }) {
   const { context, token } = sdk;
   const s = config.settings;
-  say('Loading your AEM environments…');
-  const authors = await listAuthors(token);
-  if (!authors.length) throw new Error('Your account has no AEM Cloud Service author in repository discovery.');
-  say('');
-  const author = el('select', { id: 'setup-author', class: 'nx-input' }, authors.map((a) => el('option', {
-    value: a.id, selected: a.id === s.author, disabled: a.hibernated, text: `${a.label}${a.hibernated ? ' (hibernated)' : ''}`,
-  })));
-  const folder = el('input', { id: 'setup-folder', class: 'nx-input', value: s['advisor-folder'] || `/content/dam/${context.repo}` });
-  const brokerUrl = el('input', { id: 'setup-broker', class: 'nx-input', value: s.broker || defaultBroker });
-  const tenant = el('input', { id: 'setup-tenant', class: 'nx-input', value: s.tenant || '', placeholder: 'optional' });
-  const linkBase = el('input', { id: 'setup-link-base', class: 'nx-input', value: s['link-base'] || '', placeholder: 'optional, e.g. https://www.example.com' });
-  const list = el('ul', { class: 'models' });
-  const save = el('button', { type: 'button', class: 'nx-btn-accent', text: 'Save setup', disabled: true });
-  let cards = [];
+  const state = {
+    author: s.author || '',
+    folder: s['advisor-folder'] || '',
+    broker: s.broker || defaultBroker,
+    tenant: s.tenant || '',
+    linkBase: s['link-base'] || '',
+  };
+  const show = (...kids) => { host.replaceChildren(...kids); host.hidden = false; };
+  const broker = () => makeBroker({ url: state.broker, author: state.author });
+  let authors = [];
+  const steps = {}; // the three cards; Back links between them
 
-  const find = el('button', {
-    type: 'button',
-    class: 'nx-btn-primary',
-    text: 'Find models',
-    onclick: async () => {
-      if (!DAM.test(folder.value.trim())) { say('The folder must start with /content/dam/.', 'error'); return; }
-      find.disabled = true;
-      list.replaceChildren();
+  // 3. review the models found in the folder, then save
+  steps.models = async () => {
+    say(`Reading ${state.folder}…`);
+    const b = broker();
+    const items = await b.list(state.folder, 50);
+    const byModel = new Map();
+    items.forEach((f) => { if (f.model?.id && !byModel.has(f.model.id)) byModel.set(f.model.id, f); });
+    if (!byModel.size) throw new Error(`No Content Fragments in ${state.folder}. Pick another folder.`);
+    const base = { linkBase: state.linkBase.replace(/\/$/, ''), assetBase: `https://${state.author.replace(/^author-/, 'publish-')}` };
+    const models = await Promise.all([...byModel.keys()].map((id) => b.model(id)));
+    const samples = [...byModel.values()];
+    const existing = (m) => config.models.find((x) => x.model === m.path || x.model === m.id);
+    const cards = models.map((m, i) => modelCard(m, samples[i], existing(m), b, base));
+    say('');
+    const save = el('button', { type: 'button', class: 'nx-btn-accent wide', text: 'Save setup' });
+    save.onclick = async () => {
+      save.disabled = true;
+      save.textContent = 'Saving…';
       try {
-        const broker = makeBroker({ url: brokerUrl.value.trim(), author: author.value });
-        say(`Reading ${folder.value.trim()} on ${author.value}…`);
-        const items = (await broker.list(folder.value.trim(), 50)) || [];
-        const byModel = new Map();
-        items.forEach((f) => { if (f.model?.id && !byModel.has(f.model.id)) byModel.set(f.model.id, f); });
-        if (!byModel.size) { say('No Content Fragments in this folder. Pick another folder.', 'error'); return; }
-        const base = { linkBase: linkBase.value.trim().replace(/\/$/, ''), assetBase: `https://${author.value.replace(/^author-/, 'publish-')}` };
-        const models = await Promise.all([...byModel.keys()].map((id) => broker.model(id)));
-        cards = models.map((m, i) => modelCard(m, [...byModel.values()][i], config.models.find((x) => x.model === m.path || x.model === m.id), broker, base));
-        list.replaceChildren(...cards.map((c) => c.card));
-        save.disabled = false;
-        say(`${models.length} model${models.length > 1 ? 's' : ''} found. Review the templates, then Save setup.`, 'ok');
-      } catch (e) { say(e.message, 'error'); } finally { find.disabled = false; }
-    },
-  });
-
-  save.onclick = async () => {
-    save.disabled = true;
-    try {
-      const settings = {
-        broker: brokerUrl.value.trim(),
-        author: author.value,
-        tenant: tenant.value.trim(),
-        'link-base': linkBase.value.trim(),
-        'advisor-folder': folder.value.trim(),
-      };
-      const models = cards.map((c) => c.value()).filter(Boolean);
-      await saveConfig(context, token, mergeConfig(raw, { settings, models, panelPath: window.location.pathname }));
-      say('Setup saved. Reloading…', 'ok');
-      setTimeout(() => window.location.reload(), 800);
-    } catch (e) { say(e.message, 'error'); save.disabled = false; }
+        const settings = {
+          broker: state.broker, author: state.author, tenant: state.tenant, 'link-base': state.linkBase, 'advisor-folder': state.folder,
+        };
+        await saveConfig(context, token, mergeConfig(raw, { settings, models: cards.map((c) => c.value()).filter(Boolean), panelPath: window.location.pathname }));
+        say('Setup saved. Reloading…', 'ok');
+        setTimeout(() => window.location.reload(), 800);
+      } catch (e) { say(e.message, 'error'); save.disabled = false; save.textContent = 'Save setup'; }
+    };
+    show(card(
+      back(() => steps.folder()),
+      el('h2', { text: 'Review the templates' }),
+      el('p', { text: `${models.length} model${models.length > 1 ? 's' : ''} in ${state.folder}. ${INTRO_TEMPLATES}` }),
+      el('ul', { class: 'models' }, cards.map((c) => c.card)),
+      save,
+      fine(`Saves to the DA configuration of ${context.org}/${context.repo}. Existing rows and other sheets are kept.`),
+    ));
   };
 
-  host.replaceChildren(
-    el('h2', { text: 'Set up Content Fragments' }),
-    el('p', { class: 'muted', text: 'Connect this site to AEM once. Everyone who opens the panel afterwards uses this setup.' }),
-    el(
-      'section',
-      { class: 'card step' },
-      el('h3', { text: '1. AEM author' }),
-      el('label', { for: 'setup-author', text: 'Environment' }),
-      author,
+  // 2. the fragment folder in this environment
+  steps.folder = async () => {
+    say('');
+    const input = el('input', {
+      id: 'setup-folder', class: 'nx-input', list: 'setup-folders', autocomplete: 'off', spellcheck: 'false', value: state.folder || `/content/dam/${context.repo}`,
+    });
+    const options = el('datalist', { id: 'setup-folders' });
+    const count = fine('Loading folders…');
+    const go = el('button', { type: 'submit', class: 'nx-btn-accent wide', text: 'Find models' });
+    const field = (id, label, value, placeholder, key) => {
+      const i = el('input', {
+        id, class: 'nx-input', value, placeholder, oninput: (e) => { state[key] = e.target.value.trim(); },
+      });
+      return [el('label', { for: id, text: label }), i];
+    };
+    const form = el(
+      'form',
+      {
+        onsubmit: async (e) => {
+          e.preventDefault();
+          state.folder = input.value.trim().replace(/\/$/, '');
+          if (!/^\/content\/dam\/\S/.test(state.folder)) { say('Pick a folder under /content/dam.', 'error'); return; }
+          go.disabled = true;
+          go.textContent = 'Finding models…';
+          try { await steps.models(); } catch (err) { say(err.message, 'error'); go.disabled = false; go.textContent = 'Find models'; }
+        },
+      },
       el('label', { for: 'setup-folder', text: 'Content Fragment folder' }),
-      folder,
+      input,
+      options,
+      count,
       el(
         'details',
         {},
         el('summary', { text: 'More settings' }),
-        el('label', { for: 'setup-broker', text: 'Broker (App Builder action URL)' }),
-        brokerUrl,
-        el('label', { for: 'setup-tenant', text: 'Experience Cloud tenant, for "Open in AEM" links' }),
-        tenant,
-      el('label', { for: 'setup-link-base', text: 'Link base: the site that serves root-relative fragment links' }),
-        linkBase,
+        ...field('setup-broker', 'Broker (App Builder action URL)', state.broker, '', 'broker'),
+        ...field('setup-tenant', 'Experience Cloud tenant, for "Open in AEM" links', state.tenant, 'optional', 'tenant'),
+        ...field('setup-link-base', 'Link base: the site that serves root-relative fragment links', state.linkBase, 'optional, e.g. https://www.example.com', 'linkBase'),
       ),
-      el('div', { class: 'actions' }, find),
-    ),
-    el('section', { class: 'step' }, el('h3', { text: '2. Models and templates' }), list),
-    el('div', { class: 'actions sticky' }, save, mode === 'edit' ? el('button', {
-      type: 'button', class: 'nx-action-btn-quiet', text: 'Cancel', onclick: () => window.location.reload(),
-    }) : null),
-  );
-  host.hidden = false;
+      go,
+    );
+    const env = authors.find((a) => a.id === state.author);
+    show(card(
+      back(() => steps.author()),
+      el('h2', { text: 'Choose the fragment folder' }),
+      el('p', { text: `Where this site's Content Fragments live in ${env?.label || state.author}. Models are found there, and Content Advisor opens there.` }),
+      form,
+    ));
+    try {
+      const folders = await broker().folders('/content/dam');
+      options.replaceChildren(...folders.map((f) => el('option', { value: f.path, label: f.title })));
+      // preselect the folder named like the site, else keep what is there
+      const match = folders.find((f) => f.path.toLowerCase() === `/content/dam/${context.repo}`.toLowerCase());
+      if (!state.folder && match) input.value = match.path;
+      count.textContent = `${folders.length} folders in this environment. Type to filter; you can type a subfolder too.`;
+    } catch (e) { count.textContent = `Folders could not be listed (${e.message}). Type the folder path.`; }
+  };
+
+  // 1. connect AEM: pick the author environment
+  steps.author = async () => {
+    say('');
+    show(card(el('h2', { text: 'Connect AEM' }), fine('Loading your AEM environments…')));
+    if (!authors.length) authors = await listAuthors(token);
+    if (!authors.length) throw new Error('Your account has no AEM Cloud Service author in repository discovery.');
+    const pick = (a) => { state.author = a.id; steps.folder().catch((e) => say(e.message, 'error')); };
+    const rows = (q) => authors
+      .filter((a) => !q || `${a.label} ${a.program} ${a.id}`.toLowerCase().includes(q.toLowerCase()))
+      .map((a) => pickRow(a, a.id === state.author, pick));
+    const list = el('ul', { class: 'picks' }, rows(''));
+    const onFilter = (e) => list.replaceChildren(...rows(e.target.value));
+    const filter = authors.length > 6 ? el('input', {
+      id: 'setup-filter', class: 'nx-input', type: 'search', placeholder: 'Filter environments', oninput: onFilter,
+    }) : null;
+    show(card(
+      el('h2', { text: 'Connect AEM' }),
+      el('p', { text: `Pick the AEM author with this site's Content Fragments. Everyone who opens the panel on ${context.repo} uses it.` }),
+      filter ? el('label', { for: 'setup-filter', class: 'sr-only', text: 'Filter environments' }) : null,
+      filter,
+      list,
+      fine('These are the AEM Cloud Service authors your Adobe account can reach. Fragments are read and saved with your own permissions.'),
+      mode === 'edit' ? el('button', { type: 'button', class: 'nx-action-btn-quiet', text: 'Cancel', onclick: () => window.location.reload() }) : null,
+    ));
+  };
+
+  await steps.author();
 }

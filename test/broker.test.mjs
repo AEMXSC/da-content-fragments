@@ -98,6 +98,15 @@ test('patch may only touch fields, title, description', () => {
   assert.throws(() => plan({ op: 'patch', id: ID, ops: [{ op: 'replace', path: '/model', value: 'x' }] }));
   assert.throws(() => plan({ op: 'patch', id: ID, ops: [] }));
   assert.throws(() => plan({ op: 'list', path: '/content/dam/../etc' }));
+  // folder names with spaces are real DAM folders; padded, empty or dot segments are not
+  assert.match(plan({ op: 'list', path: '/content/dam/Assets Demo 2027' }).path, /path=%2Fcontent%2Fdam%2FAssets%20Demo%202027&/);
+  assert.throws(() => plan({ op: 'list', path: '/content/dam/ x' }));
+  assert.throws(() => plan({ op: 'list', path: '/content/dam//x' }));
+  assert.equal(plan({ op: 'folders' }).path, '/adobe/folders?path=%2Fcontent%2Fdam&limit=50');
+  assert.match(plan({ op: 'folders', path: '/content/dam/tsc', cursor: 'abc_-=' }).path, /path=%2Fcontent%2Fdam%2Ftsc&limit=50&cursor=abc_-%3D$/);
+  assert.throws(() => plan({ op: 'folders', path: '/content/dam/..' }));
+  assert.throws(() => plan({ op: 'folders', cursor: 'a&b' }));
+  assert.throws(() => plan({ op: 'folders', path: '/etc' }));
   assert.throws(() => plan({ op: 'get', id: 'not-a-uuid' }));
   assert.throws(() => plan({ op: 'get', id: ID, variation: '../x' }));
   assert.throws(() => plan({ op: 'delete', id: ID }));

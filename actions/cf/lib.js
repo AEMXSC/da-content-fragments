@@ -10,7 +10,10 @@
 
 const AUTHOR_HOST = /^author-p\d+-e\d+\.adobeaemcloud\.com$/;
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-const DAM_PATH = /^\/content\/dam\/[A-Za-z0-9._\-/]+$/;
+// DAM folder names may contain spaces ("/content/dam/Assets Demo 2027"); no empty, . or .. segments
+const DAM_PATH = /^\/content\/dam(?:\/[A-Za-z0-9._\- ]+)+$/;
+const FOLDER_PATH = /^\/content\/dam(?:\/[A-Za-z0-9._\- ]+)*$/;
+const CURSOR = /^[A-Za-z0-9_\-=.~]{1,1000}$/;
 const NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
 const MODEL_ID = /^[A-Za-z0-9_-]{8,400}={0,2}$/;
 
@@ -55,8 +58,8 @@ function bearer(headers = {}) {
 
 function need(value, re, what) {
   if (typeof value !== 'string' || !re.test(value)) throw new BrokerError(400, `Invalid ${what}.`);
-  if (what === 'fragment path' && value.split('/').some((s) => s === '.' || s === '..')) {
-    throw new BrokerError(400, 'Invalid fragment path.');
+  if (/path$/.test(what) && value.split('/').some((s) => s === '.' || s === '..' || s.trim() !== s)) {
+    throw new BrokerError(400, `Invalid ${what}.`);
   }
   return value;
 }
@@ -97,6 +100,12 @@ function plan(params) {
       const path = need(params.path, DAM_PATH, 'fragment path');
       const limit = Math.min(Math.max(parseInt(params.limit, 10) || 20, 1), 50);
       return { method: 'GET', path: `/adobe/sites/cf/fragments?path=${encodeURIComponent(path)}&limit=${limit}` };
+    }
+    case 'folders': {
+      // the DAM folders directly under a folder (the setup folder picker), paged by cursor
+      const path = need(params.path || '/content/dam', FOLDER_PATH, 'folder path');
+      const cursor = params.cursor ? `&cursor=${encodeURIComponent(need(params.cursor, CURSOR, 'cursor'))}` : '';
+      return { method: 'GET', path: `/adobe/folders?path=${encodeURIComponent(path)}&limit=50${cursor}` };
     }
     case 'get':
       return { method: 'GET', path: `/adobe/sites/cf/fragments/${id()}${variation()}?references=direct-hydrated` };
