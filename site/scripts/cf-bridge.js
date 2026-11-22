@@ -57,6 +57,30 @@ function replaceKeepingIndexes(live, next) {
   live.replaceWith(next);
 }
 
+const kind = (n) => (n.nodeType === Node.ELEMENT_NODE ? n.nodeName : `#${n.nodeType}`);
+
+/**
+ * Pair live and new children of the same kind, in order (longest common subsequence), so an
+ * added or removed paragraph does not shift every later element: Map(new index → live index).
+ */
+function align(old, kids) {
+  const n = old.length;
+  const m = kids.length;
+  const lcs = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      lcs[i][j] = kind(old[i]) === kind(kids[j]) ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  const pairs = new Map();
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (kind(old[i]) === kind(kids[j])) { pairs.set(j, i); i += 1; j += 1; } else if (lcs[i + 1][j] >= lcs[i][j + 1]) i += 1; else j += 1;
+  }
+  return pairs;
+}
+
 /**
  * Make `live` look like `next` while keeping live nodes where the structure matches: changed text
  * is updated in the existing text node, attributes are synced, and only a structural difference
@@ -76,8 +100,16 @@ export function morph(live, next) {
   syncAttributes(live, next);
   const kids = [...next.childNodes];
   const old = [...live.childNodes];
-  kids.forEach((kid, i) => (old[i] ? morph(old[i], kid) : live.append(kid)));
-  old.slice(kids.length).forEach((n) => n.remove());
+  const pairs = align(old, kids);
+  kids.forEach((kid, j) => {
+    const i = pairs.get(j);
+    if (i !== undefined) { morph(old[i], kid); return; }
+    // an added node goes before the next live node that is kept
+    const after = [...pairs.entries()].find(([jj]) => jj > j);
+    if (after) old[after[1]].before(kid); else live.append(kid);
+  });
+  const kept = new Set(pairs.values());
+  old.forEach((n, i) => { if (!kept.has(i)) n.remove(); });
 }
 
 // the stored section with the same Fragment/Variation metadata (not by position: personalization
