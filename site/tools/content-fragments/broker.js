@@ -25,7 +25,7 @@ export default function createBroker({ url, author, getToken }) {
     let json = null;
     try { json = await res.json(); } catch { /* non-JSON error page */ }
     if (!res.ok) {
-      const e = new Error(json?.error || `Broker returned HTTP ${res.status}.`);
+      const e = new Error(json?.error || `Could not reach AEM through the broker (HTTP ${res.status}). Try again in a moment.`);
       e.status = res.status;
       throw e;
     }
@@ -73,11 +73,14 @@ export const editable = (field) => !field.locked && !field.multiple
   && ['text', 'long-text'].includes(field.type)
   && (field.values || []).length <= 1 && (field.values || []).every((v) => typeof v === 'string');
 
-/** Status light from the master fragment: published, published with changes, or not published */
+/**
+ * Status light from the master fragment: published, published with changes, or not published.
+ * Not published is a state, not a failure: neutral, so red stays for errors.
+ */
 export function statusOf(fragment) {
   const s = String(fragment?.status || '').toUpperCase();
   if (s === 'PUBLISHED') return { tone: 'ok', label: 'Published' };
   if (s === 'MODIFIED') return { tone: 'warn', label: 'Changes not published' };
-  if (s === 'UNPUBLISHED' || s === 'DRAFT' || s === 'NEW') return { tone: 'off', label: 'Not published' };
+  if (s === 'UNPUBLISHED' || s === 'DRAFT' || s === 'NEW') return { tone: 'neutral', label: 'Not published' };
   return { tone: 'unknown', label: s ? `Status: ${s.toLowerCase()}` : 'Publication unknown' };
 }

@@ -84,6 +84,8 @@ export default async function openAdvisor({
   let busy = false;
   const close = () => sdk.actions.closeLibrary?.();
   cancel.onclick = close;
+  // Cancel is there from the start, so the dialog can be closed if Content Advisor fails to load
+  document.querySelector('#advisor-actions').hidden = false;
   say('Loading Adobe Content Advisor…');
   const [imsOrg] = await Promise.all([imsOrgFor(author, sdk.token), loadScript(SELECTOR_URL)]);
   if (typeof window.PureJSSelectors?.renderContentAdvisor !== 'function') throw new Error('Adobe Content Advisor is unavailable.');
@@ -112,7 +114,6 @@ export default async function openAdvisor({
   };
   insert.onclick = () => onSubmit({ contentFragments: selected });
   host.hidden = false;
-  document.querySelector('#advisor-actions').hidden = false;
   window.PureJSSelectors.renderContentAdvisor(host, {
     imsToken: sdk.token,
     imsOrg,

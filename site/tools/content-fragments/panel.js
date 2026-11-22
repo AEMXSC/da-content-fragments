@@ -1,22 +1,24 @@
 /*
  * Content Fragments panel for DA / Experience Workspace (inline library tool).
  * Generic: everything site-specific comes from the DA config sheets `content-fragments`
- * (broker, author, tenant) and `content-fragment-models` (model → template). Author content is
- * read and saved through the broker; the preview is updated through cf-bridge on the page.
+ * (broker, author) and `content-fragment-models` (model → template). Author content is read and
+ * saved through the broker; the preview is updated through cf-bridge on the page.
  * Based on Mark Szulc's Fréscopa Content Fragment plugin (Apache-2.0).
  */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { readRefs, readConfig } from './refs.js';
-import createBroker, { fieldPatch, editable, statusOf } from './broker.js';
+import createBroker, { statusOf } from './broker.js';
 import { render, fragmentData } from '../../scripts/cf-render.js';
-import { applyToPage } from './apply.js';
+import openEditor from './editor.js';
 import openAdvisor from './advisor.js';
 import runSetup from './setup.js';
+import { imsOrgFor } from './discovery.js';
 import { starterTemplate } from './starter.js';
 import el, { icon } from './ui.js';
 
 // the shared broker deployment (one App Builder action serves every site); setup can change it
 const DEFAULT_BROKER = 'https://3635370-dacontentfragments-stage.adobeioruntime.net/api/v1/web/da-cf/cf';
+const SETUP_DONE = 'cf-setup-done';
 
 const $ = (sel) => document.querySelector(sel);
 const say = (msg, tone = '') => { const s = $('#status'); s.textContent = msg; s.dataset.tone = tone; };
@@ -28,6 +30,7 @@ let config;
 let page;
 let sdk; // { context, token, actions }
 let live; // the editor's live document: { html, selection: { blockIndex }, editable }
+let org; // Promise<IMS org of the author | null>, for "Open in AEM" links
 
 const linkBase = () => (config.settings['link-base'] || '').replace(/\/$/, '');
 // images referenced by fragments load from AEM publish (setting `asset-base` overrides)
@@ -48,12 +51,12 @@ async function loadRedirects() {
 
 /** preview the page (EDS admin allows this origin), after the editor saved it */
 async function previewPage() {
-  const { org, repo } = sdk.context;
+  const { org: daOrg, repo } = sdk.context;
   const p = sdk.context.path.replace(/\/index$/, '/');
-  const res = await fetch(`https://admin.hlx.page/preview/${org}/${repo}/main${p}`, {
+  const res = await fetch(`https://admin.hlx.page/preview/${daOrg}/${repo}/main${p}`, {
     method: 'POST', headers: { Authorization: `Bearer ${sdk.token}`, 'x-content-source-authorization': `Bearer ${sdk.token}` },
   });
-  if (!res.ok) throw new Error(`Applied in the editor, but preview returned HTTP ${res.status}.`);
+  if (!res.ok) throw new Error(`Applied in the editor, but the page preview did not update (HTTP ${res.status}). Use Preview in the editor.`);
 }
 // BroadcastChannel only connects documents of the same origin (this site's preview): no origin
 // check is needed, and every message is still checked for this page and a /content/dam path
@@ -61,15 +64,19 @@ const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('
 
 function post(msg) { channel?.postMessage({ page, ...msg }); }
 
+// listeners for editor documents and preview replies (each open fragment editor registers)
+const liveListeners = new Set();
+const renderedListeners = new Set();
+
 let previewConnected = false;
-let renderTimer;
 function previewState(on) {
   previewConnected = previewConnected || on;
   const s = $('#preview-state');
-  s.dataset.tone = previewConnected ? 'ok' : 'off';
+  s.dataset.tone = previewConnected ? 'ok' : 'warn';
   s.lastElementChild.textContent = previewConnected
-    ? 'Live preview connected'
-    : 'Live preview not connected: the page preview is not running cf-bridge.js, or is on another origin. Reload the page preview.';
+    ? 'Live preview on'
+    : 'Live preview off: reload the page preview to see edits as you type.';
+  s.title = previewConnected ? '' : 'The page preview is not running cf-bridge.js, or is on another origin.';
 }
 
 /** the model's template: saved by setup (`html`), a template file, else the starter (cf-card) */
@@ -92,105 +99,35 @@ async function template(fragment) {
   return templates.get(m.template);
 }
 
-function editorUrl(id) {
+/**
+ * The fragment in AEM's editor. `@<IMS org>` makes Experience Cloud switch to the author's org
+ * (and rewrite it to the org's tenant), so no tenant needs configuring; the `tenant` setting is
+ * only a fallback when the org cannot be found.
+ */
+async function editorUrl(id) {
   const u = new URL('https://experience.adobe.com/');
   u.searchParams.set('repo', broker.author);
-  const tenant = config.settings.tenant ? `@${config.settings.tenant}/` : '';
-  u.hash = `/${tenant}aem/cf/editor/editor/${encodeURIComponent(id)}`;
+  const owner = (await org) || config.settings.tenant || '';
+  const prefix = owner ? `@${owner}/` : '';
+  u.hash = `/${prefix}aem/cf/editor/editor/${encodeURIComponent(id)}`;
   return u.href;
 }
 
-async function openEditor(ref, fragment, host) {
-  host.replaceChildren(el('p', { class: 'muted', text: 'Loading fields from AEM author…' }));
-  const variations = [{ name: 'master', title: 'Main' }, ...await broker.variations(fragment.id)];
-  let current = ref.variation;
-  let snapshot;
-  let draft = {};
-  const tpl = await template(fragment).catch((e) => { say(e.message, 'error'); return null; });
-  // one rendering for the live preview and for Apply: the same template and data
-  const rendered = () => {
-    const fields = snapshot.data.fields.map((f) => (f.name in draft ? { ...f, values: [draft[f.name]] } : f));
-    return render(tpl, fragmentData({ ...snapshot.data, fields }, {
-      path: ref.path, variation: current, linkBase: linkBase(), redirects, assetBase: assetBase(),
-    }));
-  };
-  const preview = () => {
-    if (!tpl) return;
-    post({
-      type: 'render', path: ref.path, variation: current, html: rendered(),
-    });
-    clearTimeout(renderTimer);
-    renderTimer = setTimeout(() => say('The page preview did not answer, so it shows the saved page. Save to AEM, then Apply to page to see the change.', 'error'), 4000);
-  };
-  const apply = el('button', {
-    type: 'button', class: 'nx-btn-primary', text: 'Apply to page', hidden: true, title: 'Click inside this block in the editor first',
-    onclick: async () => {
-      apply.disabled = true;
-      try {
-        say(await applyToPage({
-          actions: sdk.actions, live, ref: { ...ref, variation: current }, renderedHtml: rendered(), preview: previewPage,
-        }), 'ok');
-        apply.hidden = true;
-      } catch (e) { say(e.message, 'error'); } finally { apply.disabled = false; }
-    },
-  });
-  let timer;
-  const draw = () => {
-    const form = el('form', { class: 'fields', onsubmit: (e) => e.preventDefault() });
-    snapshot.data.fields.forEach((f) => {
-      const id = `f-${f.name}`;
-      const value = f.name in draft ? draft[f.name] : (f.values?.[0] ?? '');
-      let input;
-      if (editable(f)) {
-        input = el(f.type === 'long-text' ? 'textarea' : 'input', {
-          id, name: f.name, class: 'nx-input', rows: f.type === 'long-text' ? 4 : null,
-          oninput: (e) => { draft[f.name] = e.target.value; clearTimeout(timer); timer = setTimeout(preview, 350); },
-        });
-        input.value = value;
-      } else {
-        input = el('output', { id, class: 'readonly', text: Array.isArray(f.values) ? f.values.join(', ') : '' });
-      }
-      form.append(el('label', { for: id, text: f.label || f.name }), input);
-    });
-    const save = el('button', {
-      type: 'button', class: 'nx-btn-accent', text: 'Save to AEM',
-      onclick: async () => {
-        const ops = fieldPatch(snapshot.data.fields, draft);
-        if (!ops.length) { say('No changes to save.'); return; }
-        save.disabled = true;
-        try {
-          const r = await broker.patch(fragment.id, current, snapshot.etag, ops);
-          draft = {};
-          snapshot = await broker.get(fragment.id, current); // fresh values and ETag
-          if (r.etag && !snapshot.etag) snapshot.etag = r.etag;
-          draw();
-          apply.hidden = !tpl;
-          const next = tpl ? ' To update this page: click inside the block in the editor, then "Apply to page".' : '';
-          say(`Saved to ${current === 'master' ? 'Main' : current} on AEM author.${next} Publish in AEM to update the live fragment.`, 'ok');
-        } catch (e) {
-          say(e.message, 'error');
-        } finally { save.disabled = false; }
-      },
-    });
-    const reset = el('button', {
-      type: 'button', class: 'nx-action-btn-quiet', text: 'Discard', onclick: () => { draft = {}; draw(); preview(); },
-    });
-    host.replaceChildren(
-      el('div', { class: 'field' }, el('label', { for: 'variation', text: 'Variation' }), el('select', {
-        id: 'variation', class: 'nx-input',
-        onchange: async (e) => { current = e.target.value; draft = {}; snapshot = await broker.get(fragment.id, current); draw(); preview(); },
-      }, variations.map((v) => el('option', { value: v.name, selected: v.name === current, text: v.title || v.name })))),
-      form,
-      el('div', { class: 'actions' }, save, apply, reset, el('a', {
-        class: 'nx-action-btn', href: editorUrl(fragment.id), target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Open in AEM (opens in a new tab)',
-      }, icon('openin'), 'Open in AEM')),
-      tpl ? el('p', { class: 'muted', text: 'The preview updates as you type. Nothing is saved until "Save to AEM".' })
-        : el('p', { class: 'muted', text: 'This model has no template: preview updates are off.' }),
-    );
-  };
-  snapshot = await broker.get(fragment.id, current);
-  draw();
-}
+const services = {
+  get broker() { return broker; },
+  get sdk() { return sdk; },
+  live: () => live,
+  onLive: (fn) => liveListeners.add(fn),
+  onRendered: (fn) => renderedListeners.add(fn),
+  post,
+  previewOn: () => previewConnected,
+  template,
+  rendered: (tpl, data, ref) => render(tpl, fragmentData(data, {
+    path: ref.path, variation: ref.variation, linkBase: linkBase(), redirects, assetBase: assetBase(),
+  })),
+  editorUrl,
+  previewPage,
+};
 
 function row(ref) {
   const name = ref.path.split('/').pop();
@@ -201,7 +138,16 @@ function row(ref) {
     if (title) light.title = title;
   };
   const body = el('div', { class: 'body', hidden: true });
-  let fragment;
+  const unsaved = el('span', { class: 'unsaved', text: 'Unsaved', hidden: true });
+  const lookup = () => broker.byPath(ref.path).then((f) => {
+    if (!f) { setLight('error', 'Not found in AEM'); return null; }
+    const st = statusOf(f);
+    setLight(st.tone, st.label, f.id);
+    return f;
+  });
+  const found = lookup().catch((e) => { setLight('unknown', 'AEM unavailable', e.message); say(e.message, 'error'); return null; });
+  const api = { dirty: (on) => { unsaved.hidden = !on; }, refresh: () => lookup().catch(() => {}) };
+  const fail = (e) => body.replaceChildren(el('p', { class: 'error', text: e.message }));
   const toggle = el('button', {
     type: 'button', class: 'name', 'aria-expanded': 'false',
     onclick: async () => {
@@ -209,17 +155,13 @@ function row(ref) {
       toggle.setAttribute('aria-expanded', String(!open));
       body.hidden = open;
       post({ type: 'locate', path: ref.path, variation: ref.variation });
-      if (!open && fragment && !body.childElementCount) {
-        openEditor(ref, fragment, body).catch((e) => { body.replaceChildren(el('p', { class: 'error', text: e.message })); });
-      }
+      if (open || body.childElementCount) return;
+      body.replaceChildren(el('p', { class: 'muted', text: 'Finding this fragment in AEM…' }));
+      const fragment = await found;
+      if (!fragment) { fail(new Error('This fragment was not found in AEM author, so it cannot be edited here.')); return; }
+      openEditor(services, ref, fragment, body, api).catch(fail);
     },
-  }, icon('chevrondown'), el('span', { class: 'name-text' }, el('strong', { text: name }), el('span', { class: 'variation', text: ref.variation === 'master' ? 'Main' : ref.variation })));
-  broker.byPath(ref.path).then((f) => {
-    fragment = f;
-    if (!f) { setLight('off', 'Not found in AEM'); return; }
-    const st = statusOf(f);
-    setLight(st.tone, st.label, f.id);
-  }).catch((e) => { setLight('unknown', 'Unavailable', e.message); say(e.message, 'error'); });
+  }, icon('chevrondown'), el('span', { class: 'name-text' }, el('strong', { text: name }), el('span', { class: 'variation', text: ref.variation === 'master' ? 'Main' : ref.variation }), unsaved));
   return el('li', { class: 'ref' }, toggle, el('div', { class: 'meta' }, light, el('span', { class: 'path', text: ref.path })), body);
 }
 
@@ -232,6 +174,7 @@ function liveDocument(actions) {
     actions.subscribeLiveDocument((snapshot) => {
       live = snapshot;
       if (first) { first = false; resolve(snapshot); } else onLive?.(snapshot.html);
+      liveListeners.forEach((fn) => fn(snapshot));
     });
     setTimeout(() => resolve(live || null), 2000);
   });
@@ -243,7 +186,7 @@ function drawRefs(refs) {
   shownKey = refsKey(refs);
   $('#count').textContent = refs.length;
   $('#refs').replaceChildren(...refs.map(row));
-  say(refs.length ? '' : 'No Content Fragment on this page yet: place one with Content Advisor below, or add Fragment / Variation rows to a section\'s metadata.');
+  if (!refs.length) say('No Content Fragments on this page yet. Use "Browse with Content Advisor" below to place one.');
 }
 
 /** a fragment (or variation) rendered with its model's template: what Content Advisor inserts */
@@ -251,11 +194,16 @@ async function renderRef({ path, variation }) {
   const fragment = await broker.byPath(path);
   if (!fragment) throw new Error(`${path} was not found on ${broker.author}.`);
   const tpl = await template(fragment);
-  if (!tpl) throw new Error(`The model of ${path} has no template. Open Setup (gear) to add one.`);
+  if (!tpl) throw new Error(`The model of ${path} has no template. Open Setup to add one.`);
   const snap = await broker.get(fragment.id, variation);
-  return render(tpl, fragmentData(snap.data, {
-    path, variation, linkBase: linkBase(), redirects, assetBase: assetBase(),
-  }));
+  return services.rendered(tpl, snap.data, { path, variation });
+}
+
+/** once, right after setup saved and reloaded: say what is now available */
+function welcome() {
+  let env;
+  try { env = sessionStorage.getItem(SETUP_DONE); sessionStorage.removeItem(SETUP_DONE); } catch { env = null; }
+  if (env) say(`Connected to ${env}. Edit the fragments on this page below, or place new ones with Content Advisor.`, 'ok');
 }
 
 async function init() {
@@ -265,24 +213,26 @@ async function init() {
   page = pageKey(context.path);
   const headers = { Authorization: `Bearer ${token}` };
   const cfg = await fetch(`https://admin.da.live/config/${context.org}/${context.repo}`, { headers });
-  if (!cfg.ok && cfg.status !== 404) throw new Error(`DA config returned HTTP ${cfg.status}.`);
+  if (!cfg.ok && cfg.status !== 404) throw new Error(`Could not read this site's DA configuration (HTTP ${cfg.status}). Reload the panel; if it keeps failing, check that you can open the site in DA.`);
   const raw = cfg.ok ? await cfg.json() : {}; // 404: the site has no config yet
   config = readConfig(raw);
   await loadRedirects();
   const setup = (mode) => {
     document.body.classList.add('setup-mode');
     return runSetup({
-      sdk, host: $('#setup'), raw, config, makeBroker: (o) => createBroker({ ...o, getToken }), defaultBroker: DEFAULT_BROKER, say, mode,
+      sdk, host: $('#setup'), raw, config, makeBroker: (o) => createBroker({ ...o, getToken }), defaultBroker: DEFAULT_BROKER, say, mode, doneKey: SETUP_DONE,
     });
   };
   // first run on this site: the setup wizard instead of the list
   if (!config.settings.author || !config.settings.broker) {
+    $('#author').textContent = 'Not connected yet';
     await setup('first');
     return;
   }
   $('#setup-open').hidden = false;
   $('#setup-open').onclick = () => setup('edit').catch((e) => say(e.message, 'error'));
   broker = createBroker({ url: config.settings.broker, author: config.settings.author, getToken });
+  org = imsOrgFor(broker.author, token).catch(() => null);
   $('#author').textContent = broker.author;
   if (new URLSearchParams(window.location.search).get('advisor') === '1') {
     document.body.classList.add('advisor-mode');
@@ -293,11 +243,12 @@ async function init() {
     });
     return;
   }
+  welcome();
   // what the author has open now (the live editor document), else the stored source
   let html = (await liveDocument(actions))?.html;
   if (!html) {
     const doc = await fetch(`https://admin.da.live/source/${context.org}/${context.repo}${context.path.replace(/\/$/, '/index')}.html`, { headers });
-    if (!doc.ok) throw new Error(`The page source returned HTTP ${doc.status}.`);
+    if (!doc.ok) throw new Error(`Could not read this page from DA (HTTP ${doc.status}). Save the page in the editor, then reopen the panel.`);
     html = await doc.text();
   }
   drawRefs(readRefs(html));
@@ -314,10 +265,10 @@ async function init() {
   channel?.addEventListener('message', ({ origin, data }) => {
     if (origin !== window.location.origin || data?.page !== page) return;
     if (data.type === 'ready') previewState(true);
-    if (data.type === 'rendered') clearTimeout(renderTimer);
+    if (data.type === 'rendered') renderedListeners.forEach((fn) => fn(data));
     if (data.type === 'error') say(`Preview: ${data.message}`, 'error');
     if (data.type === 'rendered' && !data.count) say('This fragment is not visible in the current preview (another cohort or variation may be showing).');
-    if (data.type === 'reverted') say('Layout view redrew this block from the page document, so the preview shows the saved page. Save to AEM, then Apply to page to see the change.', 'error');
+    if (data.type === 'reverted') say('Layout view redrew this block from the page document, so the preview shows the saved page. Save to AEM, then Apply to page to see the change.', 'warn');
   });
   // is the page preview listening? (the site loads cf-bridge.js in its preview frames)
   post({ type: 'ping' });

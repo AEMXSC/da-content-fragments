@@ -29,8 +29,9 @@ and its own published-content endpoint.
    only fields/title/description with the caller's strong ETag (`If-Match`) and a fresh CSRF
    token, stores nothing and never logs tokens. One deployment serves every site.
 2. **Configured per site, not coded.** A sheet in the site's DA config holds the author and
-   publish hosts, folders to browse, model → block and template, editable fields, the
-   Experience Cloud tenant for editor links and the usage-metadata property. The panel builds its
+   publish hosts, folders to browse, model → block and template, editable fields and the
+   usage-metadata property. Editor links open in the author's own org, found from repository
+   discovery, so no tenant is configured. The panel builds its
    form from the fragment model (text, long text, rich text, enumeration, references).
 3. **One renderer, preview and live.** Each model has a Mustache template that turns a fragment
    (and a variation) into EDS block markup. The same template renders author content in the
@@ -106,7 +107,8 @@ npm run deploy                    # zip + aio rt action update, same settings as
      and `Content Advisor` (this exact title: the panel opens it by id `content-advisor`) →
      `/tools/content-fragments/index.html?advisor=1`, experience `fullsize-dialog`;
    - sheet `content-fragments` (key/value): `broker` (action URL), `author` (author host),
-     `tenant` (optional, Experience Cloud tenant for editor links), `link-base` (optional,
+     `tenant` (optional fallback for "Open in AEM" links when the author's IMS org cannot be
+     found; links normally use `@<IMS org>`, which Experience Cloud switches to), `link-base` (optional,
      origin for root-relative fragment links; the site's `/redirects.json` keeps moved pages
      local), `advisor-folder` (optional, DAM folder Content Advisor opens on);
    - sheet `content-fragment-models`: `model` (model path or name), `label`, and `html` (the

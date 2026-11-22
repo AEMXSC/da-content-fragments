@@ -121,25 +121,38 @@ main :where(p) { margin: 0; }
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--s2-spacing-75, 4px);
   max-height: 360px;
   overflow: auto;
 }
 
+/* a row to pick: bordered at rest so it reads as a choice, chevron toward the next step */
 .pick {
   width: 100%;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 10px 12px;
-  border: 0;
+  align-items: center;
+  gap: var(--s2-spacing-100, 8px);
+  padding: var(--s2-spacing-200, 12px);
+  border: 1px solid var(--s2-gray-200, #e1e1e1);
   border-radius: var(--s2-corner-radius-500, 8px);
   background: none;
   cursor: pointer;
   text-align: left;
   font: inherit;
   color: var(--s2-gray-800, #292929);
+}
+
+.pick-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2-spacing-50, 2px);
+  flex: 1;
+  min-width: 0;
+}
+
+.pick .icon {
+  transform: rotate(-90deg);
+  color: var(--s2-gray-700, #505050);
 }
 
 .pick:hover:not(:disabled) {
@@ -151,13 +164,16 @@ main :where(p) { margin: 0; }
   outline-offset: 2px;
 }
 
+/* unavailable, but still readable: the badge says why */
 .pick:disabled {
-  opacity: 0.4;
-  cursor: default;
+  background: var(--s2-gray-75, #f3f3f3);
+  color: var(--s2-gray-700, #505050);
+  cursor: not-allowed;
 }
 
 .pick[aria-current='true'] {
   background: var(--s2-blue-100, #f5f9ff);
+  border-color: var(--s2-blue-800, #4b75ff);
 }
 
 .pick-name {
@@ -167,7 +183,7 @@ main :where(p) { margin: 0; }
 .pick-meta {
   font-size: var(--s2-body-size-xs, 12px);
   color: var(--s2-gray-700, #505050);
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .sr-only {
@@ -227,6 +243,10 @@ main h3 {
   background: var(--s2-green-100, #effcf4);
   color: var(--s2-green-1000, #03714a);
 }
+
+#status[data-tone='warn'] {
+  background: var(--s2-orange-100, #fff6e7);
+}
 .error { color: var(--s2-red-900, #d73220); }
 
 /* Cards: S2 large corner radius on a hairline border */
@@ -254,6 +274,16 @@ main h3 {
   font: inherit; color: var(--s2-gray-800, #292929);
 }
 .name:hover { background: var(--s2-gray-100, #e9e9e9); }
+
+/* darker on the hover fill, so the variation name keeps 4.5:1 */
+.name:hover .variation { color: var(--s2-blue-1000, #274dea); }
+.name:hover .unsaved { color: var(--s2-orange-1000, #a63d00); }
+
+.unsaved {
+  font-size: var(--s2-body-size-xs, 12px);
+  font-weight: 700;
+  color: var(--s2-orange-900, #c24e00);
+}
 
 .name:focus-visible {
   outline: 2px solid var(--s2-blue-800, #4b75ff);
@@ -291,7 +321,7 @@ main h3 {
 .path {
   font-size: var(--s2-body-size-xs, 12px);
   color: var(--s2-gray-700, #505050);
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 /* Status light: the S2 pattern for publication states */
@@ -311,7 +341,8 @@ main h3 {
 }
 .light[data-tone='ok'] { --dot: var(--s2-green-800, #07905b); }
 .light[data-tone='warn'] { --dot: var(--s2-orange-700, #e86a00); }
-.light[data-tone='off'] { --dot: var(--s2-red-900, #d73220); }
+.light[data-tone='error'] { --dot: var(--s2-red-900, #d73220); }
+.light[data-tone='neutral'] { --dot: var(--s2-gray-600, #717171); }
 
 /* Field editor */
 .body {
@@ -347,9 +378,108 @@ main textarea.nx-input {
   resize: vertical;
 }
 
+/* a field edited in AEM, not here: label over its value */
 .readonly {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--s2-spacing-100, 8px);
+  font-size: var(--s2-body-size-xs, 12px);
+  color: var(--s2-gray-800, #292929);
+  overflow-wrap: anywhere;
+}
+
+.readonly .label {
+  color: var(--s2-gray-700, #505050);
+}
+
+/* the way to this page: done, current, to do */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: var(--s2-spacing-200, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2-spacing-100, 8px);
+  border-radius: var(--s2-corner-radius-500, 8px);
+  background: var(--s2-gray-75, #f3f3f3);
+}
+
+.steps li {
+  display: flex;
+  gap: var(--s2-spacing-100, 8px);
   font-size: var(--s2-body-size-xs, 12px);
   color: var(--s2-gray-700, #505050);
+}
+
+.step-mark {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--s2-gray-500, #8f8f8f);
+  font-weight: 700;
+}
+
+.step-mark .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.step-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.steps strong {
+  font-size: var(--s2-body-size-s, 14px);
+}
+
+.steps [data-state='current'] {
+  color: var(--s2-gray-800, #292929);
+}
+
+.steps [data-state='current'] .step-mark {
+  border-color: var(--s2-blue-900, #3b63fb);
+  background: var(--s2-blue-900, #3b63fb);
+  color: var(--s2-gray-25, #fff);
+}
+
+.steps [data-state='done'] .step-mark {
+  border: 0;
+  color: var(--s2-green-800, #07905b);
+}
+
+/* only the current step explains itself */
+.steps li:not([data-state='current']) .step-text span {
+  display: none;
+}
+
+/* a message for this fragment, next to its buttons */
+.row-status:empty {
+  display: none;
+}
+
+.row-status {
+  padding: var(--s2-spacing-100, 8px) var(--s2-spacing-200, 12px);
+  border-radius: var(--s2-corner-radius-500, 8px);
+  background: var(--s2-gray-75, #f3f3f3);
+}
+
+.row-status[data-tone='ok'] {
+  background: var(--s2-green-100, #effcf4);
+  color: var(--s2-green-1000, #03714a);
+}
+
+.row-status[data-tone='warn'] {
+  background: var(--s2-orange-100, #fff6e7);
+}
+
+.row-status[data-tone='error'] {
+  background: var(--s2-red-100, #fff6f5);
+  color: var(--s2-red-900, #d73220);
+  box-shadow: inset 0 0 0 1px var(--s2-red-900, #d73220);
 }
 
 .actions {
@@ -420,6 +550,11 @@ main textarea.nx-input {
   vertical-align: 2px;
 }
 
+.badge.quiet {
+  background: var(--s2-gray-200, #e1e1e1);
+  color: var(--s2-gray-800, #292929);
+}
+
 /* Setup summary */
 .facts {
   display: grid;
@@ -455,6 +590,11 @@ main textarea.nx-input {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* focus moves to the heading on each step for screen readers; it is not a control */
+.step h2:focus {
+  outline: none;
 }
 .step .actions { margin-top: var(--s2-spacing-100, 8px); }
 
@@ -492,9 +632,16 @@ main textarea.nx-input {
 }
 .code { font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace !important; }
 
+.sample {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2-spacing-75, 4px);
+}
+
+/* height follows the sample's content once it loads */
 .sample .preview {
   width: 100%;
-  height: 200px;
+  height: 120px;
   border: 1px solid var(--s2-gray-200, #e1e1e1);
   border-radius: var(--s2-corner-radius-500, 8px);
   background: #fff;
