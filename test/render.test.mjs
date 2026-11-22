@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { render, fragmentData } from '../site/scripts/cf-render.js';
+import { readConfig } from '../site/tools/content-fragments/refs.js';
+import { fieldPatch, editable, statusOf } from '../site/tools/content-fragments/broker.js';
+
+test('values are escaped, triple braces raw', () => {
+  assert.equal(render('<p>{{t}}</p>{{{h}}}', { t: '<b>&', h: '<em>x</em>' }), '<p>&lt;b&gt;&amp;</p><em>x</em>');
+});
+
+test('sections, inverted sections, arrays, dotted paths, comments', () => {
+  const tpl = '{{#cta}}<a href="{{cta.url}}">{{cta.label}}</a>{{/cta}}{{^note}}none{{/note}}{{! hidden }}<ul>{{#tags}}<li>{{.}}</li>{{/tags}}</ul>';
+  assert.equal(render(tpl, { cta: { url: '/x', label: 'Go' }, tags: ['a', 'b'] }), '<a href="/x">Go</a>none<ul><li>a</li><li>b</li></ul>');
+  assert.equal(render('{{#a}}[{{#a}}in{{/a}}]{{/a}}', { a: true }), '[in]');
+  assert.throws(() => render('{{#a}}x', { a: 1 }));
+});
+
+test('fragmentData unwraps single values and keeps multi values', () => {
+  const d = fragmentData({ path: '/content/dam/x', fields: [{ name: 'title', values: ['Hi'] }, { name: 'tags', multiple: true, values: ['a', 'b'] }] }, { variation: 'cardholder' });
+  assert.deepEqual(d, {
+    _path: '/content/dam/x', _variation: 'cardholder', _title: '', title: 'Hi', tags: ['a', 'b'],
+  });
+});
+
+test('config sheets', () => {
+  const { settings, models } = readConfig({
+    ':names': ['content-fragments', 'content-fragment-models'],
+    'content-fragments': { data: [{ key: 'Broker', value: 'https://x/api/v1/web/ns/pkg/cf ' }, { key: 'author', value: 'author-p1-e2.adobeaemcloud.com' }] },
+    'content-fragment-models': { data: [{ model: 'tsc-cohort-hero', template: '/t.html', label: 'Hero' }, { model: '' }] },
+  });
+  assert.equal(settings.broker, 'https://x/api/v1/web/ns/pkg/cf');
+  assert.equal(models.length, 1);
+});
+
+test('field patch: test + replace only for changed editable fields', () => {
+  const fields = [{ name: 'a', type: 'text', values: ['1'] }, { name: 'b', type: 'text', values: ['2'] }];
+  assert.deepEqual(fieldPatch(fields, { a: '1', b: 'x', zz: 'y' }), [
+    { op: 'test', path: '/fields/1/name', value: 'b' }, { op: 'replace', path: '/fields/1/values', value: ['x'] }]);
+  assert.ok(editable({ type: 'long-text', values: ['x'] }));
+  assert.ok(!editable({ type: 'text', locked: true, values: ['x'] }));
+  assert.ok(!editable({ type: 'content-reference', values: ['/x'] }));
+  assert.equal(statusOf({ status: 'MODIFIED' }).tone, 'warn');
+});

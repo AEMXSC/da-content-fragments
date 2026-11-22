@@ -5,7 +5,8 @@
   "description": "AEM Content Fragments in DA / Experience Workspace: a CORS-free broker, a model-driven panel, one renderer for preview and live.",
   "license": "Apache-2.0",
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test test/",
+    "deploy": "node scripts/deploy.mjs"
   },
   "engines": {
     "node": ">=22"

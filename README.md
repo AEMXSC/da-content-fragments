@@ -67,13 +67,34 @@ Returns `{ data, etag }`, or `{ error }` with 401/403/404/409/422/428.
 
 ## Deploy (XSC organization)
 
+Deployed: project `dacontentfragments` (AEM XSC Showcase), workspace Stage:
+`https://3635370-dacontentfragments-stage.adobeioruntime.net/api/v1/web/da-cf/cf`.
+
 ```bash
 aio login
-aio console org select <XSC org>
-aio app use            # pick the project/workspace created in Developer Console
+aio console org select <org id> && aio console project select dacontentfragments && aio console workspace select Stage
+aio app use --global --no-input   # writes .env/.aio (git-ignored)
 npm test
-aio app deploy
+npm run deploy                    # zip + aio rt action update, same settings as app.config.yaml
 ```
+
+`aio app deploy` works too where its webpack build runs; on Windows with Node 26 it stalled at
+"Building actions". The action needs no bundling (two CommonJS files), so `npm run deploy`
+(`scripts/deploy.mjs`) zips `actions/cf` and updates the action directly.
+
+## Install on a site
+
+1. Copy `site/` into the EDS repo: `tools/content-fragments/*` (panel), `scripts/cf-render.js`,
+   `scripts/cf-bridge.js`, and per model a template (e.g. `tools/content-fragments/templates/*.html`).
+2. In `scripts.js` `loadDelayed()`, in a preview frame only:
+   `import('./cf-bridge.js').then((m) => m.default({ decorateButtons, decorateIcons, decorateBlock, loadBlock }))`.
+3. DA config (`https://da.live/config#/<org>/<site>`):
+   - `library`: `Content Fragments` → `/tools/content-fragments/index.html`, experience `inline`;
+   - sheet `content-fragments` (key/value): `broker` (action URL), `author` (author host),
+     `tenant` (optional, Experience Cloud tenant for editor links);
+   - sheet `content-fragment-models`: `model` (model path or name), `template`, `label`.
+4. Reference fragments on a page: Section Metadata `Fragment` + `Variation`, or a Content
+   Fragment block.
 
 ## Roadmap
 

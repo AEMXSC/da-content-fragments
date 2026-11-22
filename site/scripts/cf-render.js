@@ -1,0 +1,113 @@
+/*
+ * cf-render: a Mustache subset for Content Fragment templates, dependency-free (EDS has no
+ * runtime dependencies). One renderer for the Experience Workspace preview and the static
+ * delivery, so the two cannot drift.
+ *
+ *   {{name}}            escaped value (dotted paths: {{cta.label}}; {{.}} is the current item)
+ *   {{{name}}}          raw value (rich-text fields)
+ *   {{#name}}…{{/name}} section: once if truthy, per item if an array (item fields in scope)
+ *   {{^name}}…{{/name}} inverted section: when falsy or empty
+ *   {{! comment }}
+ * Data for a fragment: its fields by name (single values unwrapped, multi values as arrays), plus
+ * `_path`, `_variation`, `_title`.
+ */
+
+const ESC = {
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+};
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
+const NAME = /^(?:\.|[\w-]+(?:\.[\w-]+)*)$/;
+
+function check(name) {
+  if (!NAME.test(name)) throw new Error(`Invalid tag name "${name}".`);
+  return name;
+}
+
+/** the tag opening at `open`: { token (null for a comment), end } */
+function readTag(tpl, open) {
+  const raw = tpl[open + 2] === '{';
+  const width = raw ? 3 : 2;
+  const close = tpl.indexOf(raw ? '}}}' : '}}', open + 2);
+  if (close < 0) throw new Error('Unclosed tag in template.');
+  const inner = tpl.slice(open + width, close).trim();
+  const end = close + width;
+  if (raw) return { token: { t: 'raw', name: check(inner) }, end };
+  if (inner[0] === '!') return { token: null, end };
+  if (['#', '^', '/'].includes(inner[0])) return { token: { t: inner[0], name: check(inner.slice(1).trim()) }, end };
+  return { token: { t: 'var', name: check(inner) }, end };
+}
+
+/** template → tokens: { t: 'text', v } | { t: 'var'|'raw'|'#'|'^'|'/', name } */
+function tokenize(tpl) {
+  const tokens = [];
+  let pos = 0;
+  let open = tpl.indexOf('{{');
+  while (open >= 0) {
+    if (open > pos) tokens.push({ t: 'text', v: tpl.slice(pos, open) });
+    const { token, end } = readTag(tpl, open);
+    if (token) tokens.push(token);
+    pos = end;
+    open = tpl.indexOf('{{', pos);
+  }
+  if (pos < tpl.length) tokens.push({ t: 'text', v: tpl.slice(pos) });
+  return tokens;
+}
+
+/** tokens → tree: sections hold their children */
+function parse(tokens) {
+  const root = { kids: [] };
+  const stack = [root];
+  tokens.forEach((tok) => {
+    const top = stack[stack.length - 1];
+    if (tok.t === '#' || tok.t === '^') {
+      const node = { ...tok, kids: [] };
+      top.kids.push(node);
+      stack.push(node);
+    } else if (tok.t === '/') {
+      if (stack.length < 2 || top.name !== tok.name) throw new Error(`Unexpected {{/${tok.name}}}.`);
+      stack.pop();
+    } else top.kids.push(tok);
+  });
+  if (stack.length > 1) throw new Error(`Unclosed section {{#${stack[stack.length - 1].name}}}.`);
+  return root.kids;
+}
+
+function lookup(scopes, name) {
+  if (name === '.') return scopes[scopes.length - 1];
+  const [head, ...rest] = name.split('.');
+  const scope = [...scopes].reverse().find((s) => s && typeof s === 'object' && head in s);
+  if (!scope) return undefined;
+  return rest.reduce((v, p) => (v == null ? undefined : v[p]), scope[head]);
+}
+
+const isEmpty = (v) => !v || (Array.isArray(v) && !v.length);
+const text = (v) => (Array.isArray(v) ? v.join(', ') : v);
+
+function emit(nodes, scopes) {
+  return nodes.map((n) => {
+    if (n.t === 'text') return n.v;
+    const v = lookup(scopes, n.name);
+    if (n.t === 'raw') return String(v ?? '');
+    if (n.t === 'var') return esc(text(v));
+    if (n.t === '^') return isEmpty(v) ? emit(n.kids, scopes) : '';
+    if (isEmpty(v)) return '';
+    const items = Array.isArray(v) ? v : [v];
+    return items.map((item) => emit(n.kids, [...scopes, item])).join('');
+  }).join('');
+}
+
+export function render(template, data) {
+  return emit(parse(tokenize(String(template))), [data || {}]);
+}
+
+/** Management API fragment (or variation) → template data. */
+export function fragmentData(fragment, { path, variation } = {}) {
+  const data = { _path: path || fragment?.path || '', _variation: variation || 'master', _title: fragment?.title || '' };
+  (fragment?.fields || []).forEach((f) => {
+    const values = Array.isArray(f.values) ? f.values : [];
+    data[f.name] = f.multiple ? values : values[0] ?? '';
+  });
+  return data;
+}
+
+export default render;

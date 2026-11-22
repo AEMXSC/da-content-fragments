@@ -13,8 +13,8 @@ application:
               memorySize: 256
             inputs:
               LOG_LEVEL: warn
-              # comma-separated origin regexes; empty = da.live, *--*--*.aem.page|live, localhost
-              ALLOWED_ORIGINS: $ALLOWED_ORIGINS
+              # origins: da.live, *--*--*.aem.page|live and localhost (lib.js DEFAULT_ORIGINS).
+              # To override, add ALLOWED_ORIGINS: <comma-separated regexes> here.
             annotations:
               # the action checks the token itself (discovery + AEM); App Builder's own auth check
               # would accept only tokens from this project's credentials, not the DA user's token
