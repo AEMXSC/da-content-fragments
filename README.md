@@ -95,10 +95,13 @@ npm run deploy                    # zip + aio rt action update, same settings as
    `/tools/content-fragments/index.html`. Open the panel in Experience Workspace: the first time,
    it runs **Setup** (no other sheet editing):
    1. pick the AEM author from your environments (Adobe repository discovery) and a Content
-      Fragment folder;
-   2. review the models found there: each gets a starter template from its fields (the `cf-card`
-      block), editable and previewed on a real fragment; a model with a template file keeps it;
+      Fragment folder (open folders level by level; fragments in subfolders count too);
+   2. review the models found there (every fragment in the folder is read): a model gets the
+      site's template for it if the site ships one (see [Writing templates](#writing-templates)),
+      else a starter template from its fields (the `cf-card` block); editable, and previewed on a
+      real fragment with the site's styles;
    3. save: the wizard writes the config below, including the Content Advisor dialog entry.
+      Reload Experience Workspace once afterwards: it reads the library list when it loads.
    Only people who can edit the site's DA config can save; **Setup** (top right) reopens it.
    A model with no template at all still works: the panel uses its starter template.
 
@@ -118,6 +121,41 @@ npm run deploy                    # zip + aio rt action update, same settings as
    Fragment block. Or place them: **Browse with Content Advisor** in the panel inserts each
    picked fragment (and variation) at the cursor as its own section, rendered with its model's
    template, with that Section Metadata.
+
+## Writing templates
+
+A template turns one fragment into one EDS block. Ship it with the site so Setup offers it:
+`tools/content-fragments/templates/<model name>.html`, where the model name is the last part of
+the model path (`/conf/frescopa/settings/dam/cfm/models/frescopa-product` →
+`frescopa-product.html`). Example: AEMXSC/frescopa26 `templates/frescopa-product.html` with its
+`blocks/cf-product` block.
+
+- **One block, as rows and cells:** a root `<div class="block-name">`, each child `<div>` a row,
+  each grandchild `<div>` a cell, the way the block appears in `.plain.html`.
+- **Fields by name** (Mustache subset, `scripts/cf-render.js`): `{{name}}` escaped, `{{{body}}}`
+  raw (rich text), `{{#heroImage}}…{{/heroImage}}` only when set, `{{#tags}}{{.}}{{/tags}}` per
+  item. Image references (`content-reference`) are full URLs on AEM publish; fields ending in
+  `url`/`href` are resolved against `link-base` and the site's redirects.
+- **Rows with different numbers of cells: make the block ignore empty cells.** DA's editor keeps
+  block tables rectangular: when a row has fewer cells than the widest row, it can fill the row
+  with empty cells. Content Advisor inserts avoid this (a short row's last cell spans the table,
+  and a merged cell is one cell on the page), but a table an author or the editor has squared
+  will reach the block with the extra empty cells. Either give every row the same number of
+  cells, or drop empty cells before reading the rows:
+
+  ```js
+  const filled = (cell) => cell.textContent.trim() || cell.querySelector('picture, img');
+  [...block.children].forEach((row) => {
+    [...row.children].forEach((cell) => { if (!filled(cell)) cell.remove(); });
+  });
+  ```
+
+  Without it, a block that tells rows apart by their number of cells (a one-cell header row and a
+  four-cell facts row, say) reads a padded header row as a facts row.
+- **Match rows by content, not position,** where you can (the row with the picture is the image
+  row): authors may leave an optional row out.
+- **Publish the images in AEM.** The page loads them from AEM publish; an unpublished asset shows
+  as a broken image.
 
 ## Roadmap
 
