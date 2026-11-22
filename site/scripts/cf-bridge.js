@@ -43,6 +43,43 @@ function flash(section) {
   setTimeout(() => { section.style.outline = ''; section.style.outlineOffset = ''; }, 2500);
 }
 
+// attributes the editor (layout view) owns on page elements: kept, never copied from new markup
+const EDITOR_ATTR = /^(data-prose-|data-image-|data-block-|data-cursor-|data-aue-|contenteditable$|spellcheck$)/;
+const editorAttrs = (node) => [...(node.attributes || [])].filter((a) => EDITOR_ATTR.test(a.name));
+
+function syncAttributes(live, next) {
+  [...live.attributes].forEach((a) => { if (!EDITOR_ATTR.test(a.name) && !next.hasAttribute(a.name)) live.removeAttribute(a.name); });
+  [...next.attributes].forEach((a) => { if (!EDITOR_ATTR.test(a.name) && live.getAttribute(a.name) !== a.value) live.setAttribute(a.name, a.value); });
+}
+
+function replaceKeepingIndexes(live, next) {
+  if (next.nodeType === Node.ELEMENT_NODE) editorAttrs(live).forEach((a) => next.setAttribute(a.name, a.value));
+  live.replaceWith(next);
+}
+
+/**
+ * Make `live` look like `next` while keeping live nodes where the structure matches: changed text
+ * is updated in the existing text node, attributes are synced, and only a structural difference
+ * (another element in that place) replaces an element, carrying the editor's attributes over.
+ */
+export function morph(live, next) {
+  if (live.nodeType === Node.TEXT_NODE && next.nodeType === Node.TEXT_NODE) {
+    if (live.data !== next.data) live.data = next.data;
+    return;
+  }
+  if (live.nodeType !== next.nodeType || live.nodeName !== next.nodeName) {
+    replaceKeepingIndexes(live, next);
+    return;
+  }
+  if (live.nodeType !== Node.ELEMENT_NODE) return;
+  // data-block-status / data-block-name stay as they are on the live block (see EDITOR_ATTR)
+  syncAttributes(live, next);
+  const kids = [...next.childNodes];
+  const old = [...live.childNodes];
+  kids.forEach((kid, i) => (old[i] ? morph(old[i], kid) : live.append(kid)));
+  old.slice(kids.length).forEach((n) => n.remove());
+}
+
 // the stored section with the same Fragment/Variation metadata (not by position: personalization
 // can remove sections from the live DOM)
 function storedSection(body, path, variation) {
@@ -73,14 +110,16 @@ async function swap(section, html, hooks, path, variation) {
     if (block.children[i]) block.children[i].replaceWith(row.cloneNode(true));
     else block.append(row.cloneNode(true));
   });
+  // decorate the new version off-page with the site's own code, then merge it into the live block
+  // in place: Experience Workspace layout view tracks the block (data-block-index) and its text
+  // (data-prose-index) and must keep them, so the block element is never replaced
   const holder = document.createElement('div');
   holder.append(block);
   hooks.decorateButtons?.(holder);
   hooks.decorateIcons?.(holder);
-  current.parentElement.replaceWith(holder);
-  holder.className = `${name}-wrapper`;
   hooks.decorateBlock(block);
   await hooks.loadBlock(block);
+  morph(current, block);
   flash(section);
 }
 
