@@ -59,7 +59,8 @@ export function readRefs(html, DOMParserImpl = globalThis.DOMParser) {
     section.querySelectorAll(':scope > .content-fragment').forEach((block) => {
       const rows = rowsOf(block);
       const variationRow = rows.find((r) => norm(r[0]) === 'variation' && r[1]);
-      rows.filter((r) => r !== variationRow).forEach((r) => r.join('\n').split(/\s+/).forEach((p) => add(p, variationRow?.[1], i, 'block')));
+      const paths = rows.filter((r) => r !== variationRow).flatMap((r) => r.join('\n').split(/\s+/));
+      paths.forEach((p) => add(p, variationRow?.[1], i, 'block'));
     });
   });
   return out;
