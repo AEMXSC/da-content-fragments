@@ -125,6 +125,7 @@ function labelledLinks(value) {
 /**
  * Management API fragment (or variation) → template data.
  * - single values unwrapped, multi values kept as arrays;
+ * - `assetBase` (the AEM publish origin) prefixes /content/dam/ values of content-reference fields;
  * - `linkBase` (site config `link-base`, e.g. https://www.example.com) prefixes root-relative
  *   values of fields whose name ends in `url`/`Url`/`href`, unless `redirects` (the site's
  *   /redirects.json as { source: destination }) maps the path, then the destination is used;
@@ -132,13 +133,16 @@ function labelledLinks(value) {
  *   `<name>_haslinks`, so a template can render a link list instead of the raw text.
  */
 export function fragmentData(fragment, {
-  path, variation, linkBase = '', redirects = null,
+  path, variation, linkBase = '', redirects = null, assetBase = '',
 } = {}) {
   const data = { _path: path || fragment?.path || '', _variation: variation || 'master', _title: fragment?.title || '' };
+  // an asset reference (/content/dam/...) as a URL the page can load, e.g. from AEM publish
+  const asset = (v) => (assetBase && typeof v === 'string' && v.startsWith('/content/dam/') ? `${assetBase}${v}` : v);
   (fragment?.fields || []).forEach((f) => {
     const values = Array.isArray(f.values) ? f.values : [];
     const value = f.multiple ? values : values[0] ?? '';
-    data[f.name] = /(url|href)$/i.test(f.name) ? resolveLink(value, linkBase, redirects) : value;
+    if (f.type === 'content-reference') data[f.name] = Array.isArray(value) ? value.map(asset) : asset(value);
+    else data[f.name] = /(url|href)$/i.test(f.name) ? resolveLink(value, linkBase, redirects) : value;
     if (typeof value === 'string') {
       const links = labelledLinks(value).map((l) => ({ ...l, href: resolveLink(l.href, linkBase, redirects) }));
       if (links.length) {

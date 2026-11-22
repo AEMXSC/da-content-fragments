@@ -77,6 +77,8 @@ export function readConfig(json) {
   const models = sheet('content-fragment-models').map((r) => ({
     model: String(r.model || r.Model || '').trim(),
     template: String(r.template || r.Template || '').trim(),
+    // the template itself, as the setup wizard saves it (instead of a template file)
+    html: String(r.html || r.HTML || '').trim(),
     label: String(r.label || r.Label || '').trim(),
   })).filter((m) => m.model);
   return { settings, models };

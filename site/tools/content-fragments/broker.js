@@ -34,6 +34,7 @@ export default function createBroker({ url, author, getToken }) {
   return {
     author,
     byPath: async (path) => (await call('list', { path, limit: 1 })).data?.items?.find((f) => f.path === path) || null,
+    list: async (path, limit = 50) => (await call('list', { path, limit })).data?.items || [],
     get: (id, variation) => call('get', { id, variation }),
     variations: async (id) => (await call('variations', { id })).data?.items || [],
     model: async (model) => (await call('model', { model })).data,

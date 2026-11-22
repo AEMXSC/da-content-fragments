@@ -7,27 +7,11 @@
  * Based on Mark Szulc's Fréscopa Content Advisor integration (Apache-2.0).
  */
 
+import { imsOrgFor } from './discovery.js';
+
 const SELECTOR_URL = 'https://experience.adobe.com/solutions/CQ-assets-selectors/static-assets/resources/assets-selectors.js';
 const DAM = /^\/content\/dam\/[A-Za-z0-9._\-/]+$/;
 const VARIATION = /^[A-Za-z0-9_-]{1,64}$/;
-
-/** the IMS org that owns the author repository, from Adobe's repository discovery */
-export async function imsOrgFor(author, token) {
-  const res = await fetch('https://aem-discovery.adobe.io/repositories', {
-    credentials: 'omit', cache: 'no-store', headers: { Authorization: `Bearer ${token}`, 'x-api-key': 'exc_app' },
-  });
-  if (!res.ok) throw new Error(`AEM repository discovery returned HTTP ${res.status}.`);
-  const json = await res.json();
-  const repo = (json?.children || []).map((child) => {
-    const { _embedded: embedded } = child || {};
-    return embedded?.['http://ns.adobe.com/adobecloud/rel/primary'];
-  }).find((r) => r?.['repo:repositoryId'] === author);
-  const owner = repo?.['repo:owner'];
-  if (owner?.type !== 'org' || !/^[A-Za-z0-9]+@AdobeOrg$/.test(owner.id || '')) {
-    throw new Error(`Your account cannot see ${author} in AEM repository discovery.`);
-  }
-  return owner.id;
-}
 
 function loadScript(src) {
   if (window.PureJSSelectors) return Promise.resolve();

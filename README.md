@@ -86,11 +86,22 @@ npm run deploy                    # zip + aio rt action update, same settings as
 ## Install on a site
 
 1. Copy `site/` into the EDS repo: `tools/content-fragments/*` (panel), `scripts/cf-render.js`,
-   `scripts/cf-bridge.js`, and per model a template (e.g. `tools/content-fragments/templates/*.html`).
+   `scripts/cf-bridge.js` and `blocks/cf-card/` (the default layout for models without a template).
 2. In `scripts.js` `loadDelayed()`, in a preview frame only (`window.self !== window.top` and a
    `*.aem.page` or `*.preview.da.live` host; Experience Workspace previews on the latter):
    `import('./cf-bridge.js').then((m) => m.default({ decorateButtons, decorateIcons, decorateBlock, loadBlock }))`.
-3. DA config (`https://da.live/config#/<org>/<site>`):
+3. Add one row to the site's DA config `library` sheet: `Content Fragments` →
+   `/tools/content-fragments/index.html`. Open the panel in Experience Workspace: the first time,
+   it runs **Setup** (no other sheet editing):
+   1. pick the AEM author from your environments (Adobe repository discovery) and a Content
+      Fragment folder;
+   2. review the models found there: each gets a starter template from its fields (the `cf-card`
+      block), editable and previewed on a real fragment; a model with a template file keeps it;
+   3. save: the wizard writes the config below, including the Content Advisor dialog entry.
+   Only people who can edit the site's DA config can save; **Setup** (top right) reopens it.
+   A model with no template at all still works: the panel uses its starter template.
+
+   What Setup writes, for reference (`https://da.live/config#/<org>/<site>`):
    - `library`: `Content Fragments` → `/tools/content-fragments/index.html`, experience `inline`;
      and `Content Advisor` (this exact title: the panel opens it by id `content-advisor`) →
      `/tools/content-fragments/index.html?advisor=1`, experience `fullsize-dialog`;
@@ -98,7 +109,9 @@ npm run deploy                    # zip + aio rt action update, same settings as
      `tenant` (optional, Experience Cloud tenant for editor links), `link-base` (optional,
      origin for root-relative fragment links; the site's `/redirects.json` keeps moved pages
      local), `advisor-folder` (optional, DAM folder Content Advisor opens on);
-   - sheet `content-fragment-models`: `model` (model path or name), `template`, `label`.
+   - sheet `content-fragment-models`: `model` (model path or name), `label`, and `html` (the
+     template, as Setup saves it) or `template` (a template file in the site code);
+   - optional `asset-base` (where fragment images load from; default: the author's publish host).
 4. Reference fragments on a page: Section Metadata `Fragment` + `Variation`, or a Content
    Fragment block. Or place them: **Browse with Content Advisor** in the panel inserts each
    picked fragment (and variation) at the cursor as its own section, rendered with its model's

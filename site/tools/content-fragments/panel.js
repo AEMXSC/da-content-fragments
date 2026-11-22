@@ -11,18 +11,14 @@ import createBroker, { fieldPatch, editable, statusOf } from './broker.js';
 import { render, fragmentData } from '../../scripts/cf-render.js';
 import { applyToPage } from './apply.js';
 import openAdvisor from './advisor.js';
+import runSetup from './setup.js';
+import { starterTemplate } from './starter.js';
+import el from './ui.js';
+
+// the shared broker deployment (one App Builder action serves every site); setup can change it
+const DEFAULT_BROKER = 'https://3635370-dacontentfragments-stage.adobeioruntime.net/api/v1/web/da-cf/cf';
 
 const $ = (sel) => document.querySelector(sel);
-const el = (tag, attrs = {}, ...kids) => {
-  const n = document.createElement(tag);
-  Object.entries(attrs).forEach(([k, v]) => {
-    if (k === 'text') n.textContent = v;
-    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
-    else if (v !== false && v != null) n.setAttribute(k, v === true ? '' : v);
-  });
-  kids.flat().filter(Boolean).forEach((k) => n.append(k));
-  return n;
-};
 const say = (msg, tone = '') => { const s = $('#status'); s.textContent = msg; s.dataset.tone = tone; };
 const pageKey = (p) => String(p || '/').replace(/\.html$/, '').replace(/\/index$/, '/');
 const templates = new Map();
@@ -34,6 +30,8 @@ let sdk; // { context, token, actions }
 let live; // the editor's live document: { html, selection: { blockIndex }, editable }
 
 const linkBase = () => (config.settings['link-base'] || '').replace(/\/$/, '');
+// images referenced by fragments load from AEM publish (setting `asset-base` overrides)
+const assetBase = () => (config.settings['asset-base'] || `https://${broker.author.replace(/^author-/, 'publish-')}`).replace(/\/$/, '');
 
 // the site's EDS redirects sheet (/redirects.json, same origin as this panel): a fragment link to a
 // page already moved to this site resolves to the moved page, as the site's build does. Optional.
@@ -63,10 +61,17 @@ const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('
 
 function post(msg) { channel?.postMessage({ page, ...msg }); }
 
+/** the model's template: saved by setup (`html`), a template file, else the starter (cf-card) */
 async function template(fragment) {
   const m = config.models.find((x) => [fragment.model?.path, fragment.model?.id, fragment.model?.name].includes(x.model)
     || (fragment.model?.path || '').endsWith(`/${x.model}`));
-  if (!m?.template) return null;
+  if (m?.html) return m.html;
+  if (!m?.template) {
+    const id = fragment.model?.id;
+    if (!id) return null;
+    if (!templates.has(id)) templates.set(id, broker.model(id).then((model) => starterTemplate(model)));
+    return templates.get(id);
+  }
   if (!templates.has(m.template)) {
     templates.set(m.template, fetch(m.template, { cache: 'no-store' }).then((r) => {
       if (!r.ok) throw new Error(`Template ${m.template} returned HTTP ${r.status}.`);
@@ -95,7 +100,7 @@ async function openEditor(ref, fragment, host) {
   const rendered = () => {
     const fields = snapshot.data.fields.map((f) => (f.name in draft ? { ...f, values: [draft[f.name]] } : f));
     return render(tpl, fragmentData({ ...snapshot.data, fields }, {
-      path: ref.path, variation: current, linkBase: linkBase(), redirects,
+      path: ref.path, variation: current, linkBase: linkBase(), redirects, assetBase: assetBase(),
     }));
   };
   const preview = () => {
@@ -167,7 +172,7 @@ async function openEditor(ref, fragment, host) {
         href: editorUrl(fragment.id), target: '_blank', rel: 'noopener noreferrer', text: 'Open in AEM',
       })),
       tpl ? el('p', { class: 'muted', text: 'The preview updates as you type. Nothing is saved until "Save to AEM".' })
-        : el('p', { class: 'muted', text: 'No template for this model in content-fragment-models: preview updates are off.' }),
+        : el('p', { class: 'muted', text: 'This model has no template: preview updates are off.' }),
     );
   };
   snapshot = await broker.get(fragment.id, current);
@@ -230,10 +235,10 @@ async function renderRef({ path, variation }) {
   const fragment = await broker.byPath(path);
   if (!fragment) throw new Error(`${path} was not found on ${broker.author}.`);
   const tpl = await template(fragment);
-  if (!tpl) throw new Error(`No template for the model of ${path}: add it to the content-fragment-models sheet.`);
+  if (!tpl) throw new Error(`The model of ${path} has no template. Open Setup (gear) to add one.`);
   const snap = await broker.get(fragment.id, variation);
   return render(tpl, fragmentData(snap.data, {
-    path, variation, linkBase: linkBase(), redirects,
+    path, variation, linkBase: linkBase(), redirects, assetBase: assetBase(),
   }));
 }
 
@@ -244,9 +249,23 @@ async function init() {
   page = pageKey(context.path);
   const headers = { Authorization: `Bearer ${token}` };
   const cfg = await fetch(`https://admin.da.live/config/${context.org}/${context.repo}`, { headers });
-  if (!cfg.ok) throw new Error(`DA config returned HTTP ${cfg.status}.`);
-  config = readConfig(await cfg.json());
+  if (!cfg.ok && cfg.status !== 404) throw new Error(`DA config returned HTTP ${cfg.status}.`);
+  const raw = cfg.ok ? await cfg.json() : {}; // 404: the site has no config yet
+  config = readConfig(raw);
   await loadRedirects();
+  const setup = (mode) => {
+    document.body.classList.add('setup-mode');
+    return runSetup({
+      sdk, host: $('#setup'), raw, config, makeBroker: (o) => createBroker({ ...o, getToken }), defaultBroker: DEFAULT_BROKER, say, mode,
+    });
+  };
+  // first run on this site: the setup wizard instead of the list
+  if (!config.settings.author || !config.settings.broker) {
+    await setup('first');
+    return;
+  }
+  $('#setup-open').hidden = false;
+  $('#setup-open').onclick = () => setup('edit').catch((e) => say(e.message, 'error'));
   broker = createBroker({ url: config.settings.broker, author: config.settings.author, getToken });
   $('#author').textContent = broker.author;
   if (new URLSearchParams(window.location.search).get('advisor') === '1') {
