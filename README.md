@@ -101,7 +101,9 @@ npm run deploy                    # zip + aio rt action update, same settings as
       else a starter template from its fields (the `cf-card` block); editable, and previewed on a
       real fragment with the site's styles;
    3. save: the wizard writes the config below, including the Content Advisor dialog entry.
-      Reload Experience Workspace once afterwards: it reads the library list when it loads.
+      Experience Workspace reads the library list when it loads, so when the save adds that
+      entry the panel reloads Workspace (same page, SDK `setHref`). In the classic DA editor,
+      reload the page once yourself.
    Only people who can edit the site's DA config can save; **Setup** (top right) reopens it.
    A model with no template at all still works: the panel uses its starter template.
 

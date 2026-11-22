@@ -79,3 +79,20 @@ test('folder browser: suggested folder and breadcrumb trail', async () => {
     ['/content/dam', 'DAM'], ['/content/dam/frescopa', 'frescopa'], ['/content/dam/frescopa/fw26-intake', 'fw26-intake'],
   ]);
 });
+
+test('after setup: reload Experience Workspace only when the Content Advisor entry is new', async () => {
+  const { hasLibraryEntry, workspaceReload } = await import('../site/tools/content-fragments/setup.js');
+  assert.equal(hasLibraryEntry({ library: { data: [{ title: 'Content Advisor' }] } }, 'Content Advisor'), true);
+  assert.equal(hasLibraryEntry({}, 'Content Advisor'), false);
+  const calls = [];
+  const sdk = {
+    context: { org: 'aemxsc', repo: 'frescopa26', path: '/drafts/fw26-catalogue' },
+    capabilities: { liveDocument: 1 },
+    actions: { setHref: (h) => calls.push(h) },
+  };
+  workspaceReload(sdk)();
+  assert.match(calls[0], /^\/canvas\?cf-setup=\d+#\/aemxsc\/frescopa26\/drafts\/fw26-catalogue$/);
+  // not in Workspace (no live document capability), or no setHref: no reload
+  assert.equal(workspaceReload({ ...sdk, capabilities: {} }), null);
+  assert.equal(workspaceReload({ ...sdk, actions: {} }), null);
+});
