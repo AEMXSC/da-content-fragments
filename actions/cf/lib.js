@@ -97,9 +97,12 @@ function plan(params) {
     ? `/variations/${encodeURIComponent(need(params.variation, NAME, 'variation'))}` : '');
   switch (op) {
     case 'list': {
+      // fragments under a folder (subfolders included), paged by cursor; `summary` for scanning
       const path = need(params.path, DAM_PATH, 'fragment path');
       const limit = Math.min(Math.max(parseInt(params.limit, 10) || 20, 1), 50);
-      return { method: 'GET', path: `/adobe/sites/cf/fragments?path=${encodeURIComponent(path)}&limit=${limit}` };
+      const cursor = params.cursor ? `&cursor=${encodeURIComponent(need(params.cursor, CURSOR, 'cursor'))}` : '';
+      const projection = params.projection === 'summary' ? '&projection=summary' : '';
+      return { method: 'GET', path: `/adobe/sites/cf/fragments?path=${encodeURIComponent(path)}&limit=${limit}${cursor}${projection}` };
     }
     case 'folders': {
       // the DAM folders directly under a folder (the setup folder picker), paged by cursor

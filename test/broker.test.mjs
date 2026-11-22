@@ -104,6 +104,12 @@ test('patch may only touch fields, title, description', () => {
   assert.throws(() => plan({ op: 'list', path: '/content/dam//x' }));
   assert.equal(plan({ op: 'folders' }).path, '/adobe/folders?path=%2Fcontent%2Fdam&limit=50');
   assert.match(plan({ op: 'folders', path: '/content/dam/tsc', cursor: 'abc_-=' }).path, /path=%2Fcontent%2Fdam%2Ftsc&limit=50&cursor=abc_-%3D$/);
+  // fragments are paged by cursor, optionally as summaries; the cursor is validated
+  assert.equal(plan({
+    op: 'list', path: '/content/dam/f', limit: 50, cursor: 'c_1=', projection: 'summary',
+  }).path, '/adobe/sites/cf/fragments?path=%2Fcontent%2Fdam%2Ff&limit=50&cursor=c_1%3D&projection=summary');
+  assert.equal(plan({ op: 'list', path: '/content/dam/f', projection: 'full;x' }).path, '/adobe/sites/cf/fragments?path=%2Fcontent%2Fdam%2Ff&limit=20');
+  assert.throws(() => plan({ op: 'list', path: '/content/dam/f', cursor: 'a&b' }));
   assert.throws(() => plan({ op: 'folders', path: '/content/dam/..' }));
   assert.throws(() => plan({ op: 'folders', cursor: 'a&b' }));
   assert.throws(() => plan({ op: 'folders', path: '/etc' }));

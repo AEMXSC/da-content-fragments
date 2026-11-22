@@ -67,3 +67,15 @@ test('mergeConfig: settings and models upserted, library entries added, other sh
   assert.equal(raw.library.data.length, 1, 'input not mutated');
   assert.ok(mergeConfig({}, { settings: {}, models: [], panelPath: '/p' })[':names'].includes('library'));
 });
+
+test('folder browser: suggested folder and breadcrumb trail', async () => {
+  const { suggests, trail } = await import('../site/tools/content-fragments/folders.js');
+  assert.equal(suggests('frescopa', 'frescopa26'), true);
+  assert.equal(suggests('tsc', 'tsc'), true);
+  assert.equal(suggests('wknd', 'frescopa26'), false);
+  assert.equal(suggests('fre', 'frescopa26'), false); // too short to be a prefix match
+  assert.deepEqual(trail('/content/dam'), [['/content/dam', 'DAM']]);
+  assert.deepEqual(trail('/content/dam/frescopa/fw26-intake'), [
+    ['/content/dam', 'DAM'], ['/content/dam/frescopa', 'frescopa'], ['/content/dam/frescopa/fw26-intake', 'fw26-intake'],
+  ]);
+});
