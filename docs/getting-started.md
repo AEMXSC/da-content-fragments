@@ -231,8 +231,12 @@ without waiting for AEM.
 - **Apply to this page** and then **Publish the page** put the change on the live site.
 - **Publishing the fragment in AEM** is not needed for this page. Do it when other channels
   read the fragment from AEM publish, and always for its images.
+- **Text typed straight into the page** in the editor stays on that page only; AEM never gets
+  it. When you open that fragment in the panel, it says the page shows different text than AEM.
+  **Apply to page** then puts AEM's version back. To keep the page's text, type it into the
+  panel's fields and **Save to AEM** first.
 - **Changes made in AEM's own editor** reach the page the next time someone opens the fragment
-  in the panel and applies it. Re-rendering pages automatically when a fragment is published is
+  in the panel (it says the page differs) and applies it. Re-rendering pages automatically when a fragment is published is
   on the [roadmap](../README.md#roadmap).
 
 ## Troubleshooting
@@ -243,6 +247,7 @@ without waiting for AEM.
 | An environment you expect is missing in Setup | Your Adobe account has no access to it. Ask an AEM administrator for access, then open Setup again |
 | **Hibernated** environment | Wake it in Cloud Manager, then open Setup again |
 | **Browse with Content Advisor** does nothing | The library has no Content Advisor entry yet. Open Setup and save, or reload Experience Workspace once |
+| "This page shows different text than AEM" | The page was edited directly, or the fragment changed in AEM after the last Apply. Apply puts AEM's version on the page; or type the page's text into the fields and Save to AEM |
 | **Apply to this page** is unavailable | Click inside the fragment's block in the editor first |
 | "The fragment changed in AEM since it was loaded" | Someone saved it after you opened it. Reload the fragment and make your change again |
 | A broken image on the page | Publish the image in AEM |

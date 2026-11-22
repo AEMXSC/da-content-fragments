@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DOMParser as LinkeDOMParser } from 'linkedom';
 import { readRefs } from '../site/tools/content-fragments/refs.js';
-import { findBlock, mergeRows } from '../site/tools/content-fragments/apply.js';
+import { findBlock, mergeRows, differsFromPage } from '../site/tools/content-fragments/apply.js';
 
 // browsers wrap a bare fragment in <body>; linkedom does not
 class DOMParser extends LinkeDOMParser {
@@ -63,4 +63,12 @@ test('inserted section: section breaks, the block as a table, Section Metadata w
   assert.ok(html.startsWith('<hr><table><tr><td colspan="2">cohort-hero (dark)</td></tr><tr><td colspan="2"><h2>Hi</h2></td></tr><tr><td>a</td><td>b</td></tr></table>'));
   assert.match(html, /<td colspan="2">section-metadata<\/td><\/tr><tr><td>Fragment<\/td><td>\/content\/dam\/x\/a<\/td><\/tr><tr><td>Variation<\/td><td>member<\/td><\/tr><\/table><hr>$/);
   assert.doesNotMatch(sectionInsert('<div class="hero"><div><div>x</div></div></div>', { path: '/content/dam/x/a', variation: 'master' }, DOMParser), /Variation/);
+});
+
+test('differsFromPage: the page block against the fragment rendered from AEM, text only', () => {
+  const ref = { path: '/content/dam/x/hero', variation: 'cardholder' };
+  const same = `<div class="cohort-hero"><div><div><h2> Card </h2></div></div></div>`;
+  assert.equal(differsFromPage(live, ref, same, DOMParser), false); // later page rows are not compared
+  assert.equal(differsFromPage(live, ref, HERO('Card!!!'), DOMParser), true);
+  assert.equal(differsFromPage(live, { path: '/content/dam/x/none', variation: 'master' }, same, DOMParser), null);
 });
