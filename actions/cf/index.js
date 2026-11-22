@@ -63,16 +63,20 @@ async function call(params, token) {
   const req = plan(params);
   const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
   if (req.write) {
-    if (typeof req.etag !== 'string' || !req.etag || req.etag === '*' || req.etag.startsWith('W/')) {
-      throw new BrokerError(428, 'Saving needs the ETag of the version you edited: reload the fragment.');
+    // edits are guarded by the ETag the editor read; publishing is not an edit and has none
+    if (!req.publish) {
+      if (typeof req.etag !== 'string' || !req.etag || req.etag === '*' || req.etag.startsWith('W/')) {
+        throw new BrokerError(428, 'Saving needs the ETag of the version you edited: reload the fragment.');
+      }
+      headers['If-Match'] = req.etag;
     }
-    headers['If-Match'] = req.etag;
-    headers['Content-Type'] = 'application/json-patch+json';
+    headers['Content-Type'] = req.publish ? 'application/json' : 'application/json-patch+json';
     headers['CSRF-Token'] = await csrfToken(author, token);
   }
   const res = await fetch(`https://${author}${req.path}`, {
     method: req.method, headers, ...(req.body ? { body: JSON.stringify(req.body) } : {}),
   });
+  if (req.publish && res.status === 403) throw new BrokerError(403, 'AEM denied publishing: your user has no permission to publish this fragment.');
   if (!res.ok) throw aemError(res.status, req.write);
   const text = await res.text();
   return { data: text ? JSON.parse(text) : null, etag: res.headers.get('etag') };

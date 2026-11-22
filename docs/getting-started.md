@@ -202,9 +202,12 @@ The four steps under the fields show where you are:
 2. **Save to AEM** (or Ctrl+S). Saves the fragment on AEM author, for every page and channel
    that uses it. If someone else changed it in the meantime, the save stops and asks you to
    reload rather than overwrite their work.
-3. **Apply to this page.** Click inside the fragment's block in the editor, then Apply. This
-   writes the new text into this page, and the page preview updates.
-4. **Publish the page** from the editor when you are ready.
+3. **Apply to this page.** Writes the new text into this page, and the page preview updates.
+   If the fragment's block is selected in the editor when you save, this happens in the same
+   click. Otherwise click inside the block, then **Apply to page**: the editor can only replace
+   the block you are in.
+4. **Publish.** Publishes the fragment in AEM (with its variations), then this page on the live
+   site.
 
 <img src="images/panel-editor.png" alt="A fragment open in the panel: fields, the four steps, and Save to AEM" width="400">
 
@@ -225,19 +228,27 @@ metadata (`Fragment`, `Variation`) the panel uses to find it again.
 
 ### When does a change go live?
 
-The page holds its own copy of each fragment's content, so visitors and search engines see it
-without waiting for AEM.
-- **Save to AEM** changes the fragment on author, nowhere else.
-- **Apply to this page** and then **Publish the page** put the change on the live site.
-- **Publishing the fragment in AEM** is not needed for this page. Do it when other channels
-  read the fragment from AEM publish, and always for its images.
-- **Text typed straight into the page** in the editor stays on that page only; AEM never gets
-  it. When you open that fragment in the panel, it says the page shows different text than AEM.
-  **Apply to page** then puts AEM's version back. To keep the page's text, type it into the
-  panel's fields and **Save to AEM** first.
-- **Changes made in AEM's own editor** reach the page the next time someone opens the fragment
-  in the panel (it says the page differs) and applies it. Re-rendering pages automatically when a fragment is published is
-  on the [roadmap](../README.md#roadmap).
+AEM is the source of truth. The page holds a copy of each fragment's content, so visitors,
+search engines and AI agents get it without waiting for AEM. The panel keeps that copy and AEM
+together:
+
+| You | What happens |
+|---|---|
+| Edit in the panel, **Save** | The fragment is saved on AEM author, and this page is updated (in the same click when its block is selected) |
+| Type into a fragment section on the page, panel open | A few seconds later the panel saves that text to AEM author: the row says **Page edits saved to AEM** |
+| Open the panel on a page that differs from AEM | The row says **Page differs from AEM**. In the fragment, **Apply to page** puts AEM's version on the page; **Save page text to AEM** keeps the page's |
+| **Publish** in the panel | The fragment is published in AEM, then the page on the live site |
+
+- **What can be saved from the page:** a field that has its own line in the template (a name,
+  a description, a price with its `$`). Where two fields share one line (season · category), the
+  panel cannot tell which part changed: the row names those fields; edit them in the panel.
+  Images, numbers and other non-text fields are edited in AEM (**Open in AEM**).
+- **In the editor's preview,** fragment sections are outlined and labelled "From AEM", as a
+  reminder that their text belongs to AEM.
+- **Publishing in AEM's own editor, or the page from DA's Publish,** does not yet update the
+  other side. Next: a fragment published in AEM republishes the pages that use it, and a page
+  published from DA publishes its changed fragments in AEM. Until then, open the panel on the
+  page (it says the page differs) and use **Publish** there.
 
 ## Troubleshooting
 

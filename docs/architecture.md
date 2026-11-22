@@ -206,7 +206,9 @@ mode, on the configured `advisor-folder`. On **Insert**:
 | `folders.js` | Folder browser for setup step 2: breadcrumbs, suggested folder, counts, filter |
 | `editor.js` | One fragment's editor in its row: fields, drafts per variation, the four steps |
 | `advisor.js` | Content Advisor dialog, insert markup |
-| `apply.js` | Find the fragment's block in the live document and replace it through the editor |
+| `apply.js` | Find the fragment's block in the live document and replace it through the editor; `differsFromPage` (page text vs AEM's, row by row) |
+| `sync.js` | Per fragment on the page: says when the page differs from AEM; when the block's text changes between two editor snapshots (the author typed in the page), saves the readable fields to AEM after 3 s |
+| `writeback.js` | Page text → fields: renders the template with a marker per field to learn where each lands (`fieldMap`), then reads those elements from the page's block (`valuesFromBlock`); lines holding two fields are reported, never guessed |
 | `refs.js` | Read the fragment references (section metadata, Content Fragment block) and the config sheets |
 | `broker.js` | Broker client, `fieldPatch` (test + replace per changed field), `editable`, `statusOf` |
 | `discovery.js` | AEM repository discovery: environments, the author's IMS org (for editor links) |
@@ -297,9 +299,13 @@ the new version.
 
 ## Known limits
 
-- **AEM fragment changes do not reach pages by themselves.** A change made in AEM reaches a
-  page only when someone applies it from the panel. Re-rendering on AEM's "fragment published"
-  event is on the [roadmap](../README.md#roadmap).
+- **Publishing outside the panel does not sync yet.** A fragment published in AEM's editor
+  reaches pages only when someone applies it from the panel, and a page published from DA does
+  not publish its fragments in AEM. The sync service (AEM "fragment published" events and the
+  aem.live publish webhook, run as App Builder actions) is the next phase.
+- **Page edits are saved back only while the panel is open.** The panel knows the page was
+  edited (not AEM) because it sees the block change. Edits made while it is closed show as
+  "Page differs from AEM" next time, and the author chooses.
 - **Editable fields.** The panel edits text and long text only. Images, references, numbers,
   enumerations and multi-value fields are read-only, with a link to AEM.
 - **The shared broker.** Every site on the default uses one stage action: there is no

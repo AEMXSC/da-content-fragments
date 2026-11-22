@@ -124,3 +124,19 @@ test('no token: 401 without calling anything', async () => {
   assert.equal(r.statusCode, 401);
   assert.equal(calls.length, 0);
 });
+
+test('publish: one fragment by id, CSRF but no ETag, plain JSON; 403 says publishing was denied', async () => {
+  const calls = mockFetch([discovery(), [/csrf/, 200, { token: 'csrf-p' }], [/\/fragments\/publish$/, 200, { items: [{ status: 'SUCCESS_TRIGGERED' }] }]]);
+  const r = await main(req({ op: 'publish', author: AUTHOR, id: ID }));
+  assert.equal(r.statusCode, 200);
+  const pub = calls.find((c) => c.init.method === 'POST' && /publish$/.test(c.url));
+  assert.deepEqual(JSON.parse(pub.init.body), { ids: [ID] });
+  assert.equal(pub.init.headers['CSRF-Token'], 'csrf-p');
+  assert.equal(pub.init.headers['Content-Type'], 'application/json');
+  assert.equal(pub.init.headers['If-Match'], undefined);
+  mockFetch([discovery(), [/csrf/, 200, { token: 'c' }], [/publish$/, 403, {}]]);
+  const denied = await main(req({ op: 'publish', author: AUTHOR, id: ID }));
+  assert.equal(denied.statusCode, 403);
+  assert.match(JSON.parse(JSON.stringify(denied.body)).error, /publish/);
+  assert.throws(() => plan({ op: 'publish', id: 'not-a-uuid' }));
+});

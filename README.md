@@ -71,6 +71,7 @@ preview swap.
 | `metadata` | `author, id` | `GET …/fragments/{id}/metadata` |
 | `patch` | `author, id, variation?, etag, ops` | `PATCH …/fragments/{id}[/variations/{v}]` (fields, title, description only) |
 | `patch-metadata` | `author, id, etag, ops` | `PATCH …/fragments/{id}/metadata` |
+| `publish` | `author, id` | `POST /adobe/sites/cf/fragments/publish` (`{ ids: [id] }`; CSRF, no ETag) |
 
 Returns `{ data, etag }`, or `{ error }` with 401/403/404/409/422/428.
 

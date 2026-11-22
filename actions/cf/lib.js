@@ -122,6 +122,11 @@ function plan(params) {
       return {
         method: 'PATCH', write: true, path: `/adobe/sites/cf/fragments/${id()}${variation()}`, body: checkPatch(params.ops), etag: params.etag,
       };
+    case 'publish':
+      // publish this fragment (with its variations) to AEM publish; nothing it references
+      return {
+        method: 'POST', write: true, publish: true, path: '/adobe/sites/cf/fragments/publish', body: { ids: [id()] },
+      };
     case 'patch-metadata':
       return {
         method: 'PATCH', write: true, path: `/adobe/sites/cf/fragments/${id()}/metadata`, body: checkMetadataPatch(params.ops), etag: params.etag,
