@@ -171,6 +171,11 @@ The four steps under the fields show where you are:
    Setup.
 3. Pick one or more fragments, and variations if you want them, then choose **Insert**.
 
+![Content Advisor on its Content Fragments tab: fragment cards, and a fragment's details with its variations](images/content-advisor.png)
+
+*Content Advisor's Content Fragments tab. Image from Adobe Experience League,
+[Use Content Advisor](https://experienceleague.adobe.com/en/docs/experience-manager-cloud-service/content/assets/content-advisor/integrate-adobe-non-adobe-applications).*
+
 Each fragment becomes its own section, drawn with its model's template, with the section
 metadata (`Fragment`, `Variation`) the panel uses to find it again.
 
