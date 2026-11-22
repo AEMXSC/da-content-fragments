@@ -34,6 +34,19 @@ let live; // the editor's live document: { html, selection: { blockIndex }, edit
 
 const linkBase = () => (config.settings['link-base'] || '').replace(/\/$/, '');
 
+// the site's EDS redirects sheet (/redirects.json, same origin as this panel): a fragment link to a
+// page already moved to this site resolves to the moved page, as the site's build does. Optional.
+let redirects = null;
+async function loadRedirects() {
+  try {
+    const res = await fetch('/redirects.json', { cache: 'no-store' });
+    if (!res.ok) return;
+    const json = await res.json();
+    const rows = json?.data || json?.default?.data || [];
+    redirects = Object.fromEntries(rows.filter((r) => r.Source && r.Destination).map((r) => [r.Source, r.Destination]));
+  } catch { redirects = null; } // no sheet: links use the link base only
+}
+
 /** preview the page (EDS admin allows this origin), after the editor saved it */
 async function previewPage() {
   const { org, repo } = sdk.context;
@@ -80,7 +93,9 @@ async function openEditor(ref, fragment, host) {
   // one rendering for the live preview and for Apply: the same template and data
   const rendered = () => {
     const fields = snapshot.data.fields.map((f) => (f.name in draft ? { ...f, values: [draft[f.name]] } : f));
-    return render(tpl, fragmentData({ ...snapshot.data, fields }, { path: ref.path, variation: current, linkBase: linkBase() }));
+    return render(tpl, fragmentData({ ...snapshot.data, fields }, {
+      path: ref.path, variation: current, linkBase: linkBase(), redirects,
+    }));
   };
   const preview = () => {
     if (!tpl) return;
@@ -207,6 +222,7 @@ async function init() {
   const cfg = await fetch(`https://admin.da.live/config/${context.org}/${context.repo}`, { headers });
   if (!cfg.ok) throw new Error(`DA config returned HTTP ${cfg.status}.`);
   config = readConfig(await cfg.json());
+  await loadRedirects();
   broker = createBroker({ url: config.settings.broker, author: config.settings.author, getToken });
   $('#author').textContent = broker.author;
   // what the author has open now (the live editor document), else the stored source

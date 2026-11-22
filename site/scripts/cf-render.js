@@ -101,7 +101,16 @@ export function render(template, data) {
   return emit(parse(tokenize(String(template))), [data || {}]);
 }
 
-const abs = (u, base) => (base && typeof u === 'string' && u.startsWith('/') ? `${base}${u}` : u);
+// a root-relative fragment link: the site's redirect for its path when it has one (a page already
+// moved to this site), else the link base (the origin that still serves it); query and hash kept
+function resolveLink(u, base, redirects) {
+  if (typeof u !== 'string' || !u.startsWith('/') || u.startsWith('//')) return u;
+  const cut = u.search(/[?#]/);
+  const p = cut < 0 ? u : u.slice(0, cut);
+  const to = redirects?.[p] ?? redirects?.[p.replace(/\/$/, '')];
+  if (to) return `${to}${cut < 0 ? '' : u.slice(cut)}`;
+  return base ? `${base}${u}` : u;
+}
 
 // "Label: /path. Label: /path." in a text field → [{ label, href }]; [] unless every sentence is one
 function labelledLinks(value) {
@@ -117,18 +126,21 @@ function labelledLinks(value) {
  * Management API fragment (or variation) → template data.
  * - single values unwrapped, multi values kept as arrays;
  * - `linkBase` (site config `link-base`, e.g. https://www.example.com) prefixes root-relative
- *   values of fields whose name ends in `url`/`Url`/`href`;
+ *   values of fields whose name ends in `url`/`Url`/`href`, unless `redirects` (the site's
+ *   /redirects.json as { source: destination }) maps the path, then the destination is used;
  * - a text field written as labelled links also gets `<name>_links` ([{ label, href }]) and
  *   `<name>_haslinks`, so a template can render a link list instead of the raw text.
  */
-export function fragmentData(fragment, { path, variation, linkBase = '' } = {}) {
+export function fragmentData(fragment, {
+  path, variation, linkBase = '', redirects = null,
+} = {}) {
   const data = { _path: path || fragment?.path || '', _variation: variation || 'master', _title: fragment?.title || '' };
   (fragment?.fields || []).forEach((f) => {
     const values = Array.isArray(f.values) ? f.values : [];
     const value = f.multiple ? values : values[0] ?? '';
-    data[f.name] = /(url|href)$/i.test(f.name) ? abs(value, linkBase) : value;
+    data[f.name] = /(url|href)$/i.test(f.name) ? resolveLink(value, linkBase, redirects) : value;
     if (typeof value === 'string') {
-      const links = labelledLinks(value).map((l) => ({ ...l, href: abs(l.href, linkBase) }));
+      const links = labelledLinks(value).map((l) => ({ ...l, href: resolveLink(l.href, linkBase, redirects) }));
       if (links.length) {
         data[`${f.name}_links`] = links;
         data[`${f.name}_haslinks`] = true;

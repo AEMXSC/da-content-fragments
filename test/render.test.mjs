@@ -54,3 +54,15 @@ test('link base and labelled links', async () => {
   assert.equal(d.body_haslinks, true);
   assert.equal(d.plain_links, undefined);
 });
+
+test('redirects: a moved page resolves locally, hash kept; others use the link base', () => {
+  const redirects = { '/tsc/cms/credit': '/cms/credit' };
+  const d = fragmentData({ fields: [
+    { name: 'secondaryUrl', values: ['/tsc/cms/credit#creditOffers'] },
+    { name: 'ctaUrl', values: ['/tsc/cms/credit-center'] },
+    { name: 'body', values: ['Credit: /tsc/cms/credit/. Store: /tsc/store-locator.'] },
+  ] }, { linkBase: 'https://www.example.com', redirects });
+  assert.equal(d.secondaryUrl, '/cms/credit#creditOffers');
+  assert.equal(d.ctaUrl, 'https://www.example.com/tsc/cms/credit-center');
+  assert.deepEqual(d.body_links.map((l) => l.href), ['/cms/credit', 'https://www.example.com/tsc/store-locator']);
+});
