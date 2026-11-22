@@ -92,11 +92,17 @@ npm run deploy                    # zip + aio rt action update, same settings as
    `import('./cf-bridge.js').then((m) => m.default({ decorateButtons, decorateIcons, decorateBlock, loadBlock }))`.
 3. DA config (`https://da.live/config#/<org>/<site>`):
    - `library`: `Content Fragments` → `/tools/content-fragments/index.html`, experience `inline`;
+     and `Content Advisor` (this exact title: the panel opens it by id `content-advisor`) →
+     `/tools/content-fragments/index.html?advisor=1`, experience `fullsize-dialog`;
    - sheet `content-fragments` (key/value): `broker` (action URL), `author` (author host),
-     `tenant` (optional, Experience Cloud tenant for editor links);
+     `tenant` (optional, Experience Cloud tenant for editor links), `link-base` (optional,
+     origin for root-relative fragment links; the site's `/redirects.json` keeps moved pages
+     local), `advisor-folder` (optional, DAM folder Content Advisor opens on);
    - sheet `content-fragment-models`: `model` (model path or name), `template`, `label`.
 4. Reference fragments on a page: Section Metadata `Fragment` + `Variation`, or a Content
-   Fragment block.
+   Fragment block. Or place them: **Browse with Content Advisor** in the panel inserts each
+   picked fragment (and variation) at the cursor as its own section, rendered with its model's
+   template, with that Section Metadata.
 
 ## Roadmap
 

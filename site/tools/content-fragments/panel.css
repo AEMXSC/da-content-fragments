@@ -37,3 +37,10 @@ h1 { font-size: 18px; margin: 0 0 4px; display: flex; gap: 8px; align-items: cen
 .actions .primary { background: #3b63fb; border-color: #3b63fb; color: #fff; }
 .actions button:disabled { opacity: .5; cursor: default; }
 .error { color: #8b1600; }
+.place { margin-top: 20px; padding-top: 12px; border-top: 1px solid #e1e1e1; }
+.place h2 { font-size: 14px; margin: 0 0 4px; }
+/* Content Advisor dialog (?advisor=1): the picker fills the dialog, actions pinned below */
+.advisor-mode header, .advisor-mode .refs, .advisor-mode .place { display: none; }
+.advisor-mode main { display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
+.advisor-mode #advisor { flex: 1; min-height: 480px; overflow: auto; }
+.advisor-mode #advisor-actions { justify-content: flex-end; padding: 12px 0; }

@@ -10,6 +10,7 @@ import { readRefs, readConfig } from './refs.js';
 import createBroker, { fieldPatch, editable, statusOf } from './broker.js';
 import { render, fragmentData } from '../../scripts/cf-render.js';
 import { applyToPage } from './apply.js';
+import openAdvisor from './advisor.js';
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, attrs = {}, ...kids) => {
@@ -146,7 +147,8 @@ async function openEditor(ref, fragment, host) {
           if (r.etag && !snapshot.etag) snapshot.etag = r.etag;
           draw();
           apply.hidden = !tpl;
-          say(`Saved to ${current === 'master' ? 'Main' : current} on AEM author.${tpl ? ' To update this page: click inside the block in the editor, then "Apply to page".' : ''} Publish in AEM to update the live fragment.`, 'ok');
+          const next = tpl ? ' To update this page: click inside the block in the editor, then "Apply to page".' : '';
+          say(`Saved to ${current === 'master' ? 'Main' : current} on AEM author.${next} Publish in AEM to update the live fragment.`, 'ok');
         } catch (e) {
           say(e.message, 'error');
         } finally { save.disabled = false; }
@@ -201,16 +203,38 @@ function row(ref) {
 }
 
 // the editor's live document, when the host sends one (within ~2 s of subscribing)
+let onLive; // set once the list is drawn: redraws it when the page's fragments change
 function liveDocument(actions) {
   return new Promise((resolve) => {
     if (!actions?.subscribeLiveDocument) { resolve(null); return; }
     let first = true;
     actions.subscribeLiveDocument((snapshot) => {
       live = snapshot;
-      if (first) { first = false; resolve(snapshot); }
+      if (first) { first = false; resolve(snapshot); } else onLive?.(snapshot.html);
     });
     setTimeout(() => resolve(live || null), 2000);
   });
+}
+
+const refsKey = (refs) => refs.map((r) => `${r.path}#${r.variation}`).join('|');
+let shownKey = '';
+function drawRefs(refs) {
+  shownKey = refsKey(refs);
+  $('#count').textContent = refs.length;
+  $('#refs').replaceChildren(...refs.map(row));
+  say(refs.length ? '' : 'No Content Fragment on this page yet: place one with Content Advisor below, or add Fragment / Variation rows to a section\'s metadata.');
+}
+
+/** a fragment (or variation) rendered with its model's template: what Content Advisor inserts */
+async function renderRef({ path, variation }) {
+  const fragment = await broker.byPath(path);
+  if (!fragment) throw new Error(`${path} was not found on ${broker.author}.`);
+  const tpl = await template(fragment);
+  if (!tpl) throw new Error(`No template for the model of ${path}: add it to the content-fragment-models sheet.`);
+  const snap = await broker.get(fragment.id, variation);
+  return render(tpl, fragmentData(snap.data, {
+    path, variation, linkBase: linkBase(), redirects,
+  }));
 }
 
 async function init() {
@@ -225,6 +249,13 @@ async function init() {
   await loadRedirects();
   broker = createBroker({ url: config.settings.broker, author: config.settings.author, getToken });
   $('#author').textContent = broker.author;
+  if (new URLSearchParams(window.location.search).get('advisor') === '1') {
+    document.body.classList.add('advisor-mode');
+    await openAdvisor({
+      sdk, author: broker.author, folder: config.settings['advisor-folder'], renderRef, say,
+    });
+    return;
+  }
   // what the author has open now (the live editor document), else the stored source
   let html = (await liveDocument(actions))?.html;
   if (!html) {
@@ -232,12 +263,18 @@ async function init() {
     if (!doc.ok) throw new Error(`The page source returned HTTP ${doc.status}.`);
     html = await doc.text();
   }
-  const refs = readRefs(html);
-  $('#count').textContent = refs.length;
-  $('#refs').replaceChildren(...refs.map(row));
-  say(refs.length ? '' : 'No Content Fragment on this page: add Fragment / Variation rows to a section\'s metadata, or a Content Fragment block.');
-  channel?.addEventListener('message', ({ data }) => {
-    if (data?.page !== page) return;
+  drawRefs(readRefs(html));
+  let timer;
+  onLive = (next) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const refs = readRefs(next);
+      if (refsKey(refs) !== shownKey) drawRefs(refs); // a fragment section was added or removed
+    }, 600);
+  };
+  $('#browse').onclick = () => actions.showPanel?.('content-advisor');
+  channel?.addEventListener('message', ({ origin, data }) => {
+    if (origin !== window.location.origin || data?.page !== page) return;
     if (data.type === 'error') say(`Preview: ${data.message}`, 'error');
     if (data.type === 'rendered' && !data.count) say('This fragment is not visible in the current preview (another cohort or variation may be showing).');
   });

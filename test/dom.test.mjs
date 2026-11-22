@@ -46,3 +46,20 @@ test('mergeRows replaces the template rows and keeps later rows', () => {
   assert.match(out, /<li>tile<\/li>/);
   assert.doesNotMatch(out, /data-block-index/);
 });
+
+test('Content Advisor picks: master by default, variations expanded, bad input refused', async () => {
+  const { picks } = await import('../site/tools/content-fragments/advisor.js');
+  assert.deepEqual(picks([{ path: '/content/dam/x/a' }, { path: '/content/dam/x/b', variations: ['master', { name: 'member' }] }]), [
+    { path: '/content/dam/x/a', variation: 'master' }, { path: '/content/dam/x/b', variation: 'master' }, { path: '/content/dam/x/b', variation: 'member' }]);
+  assert.throws(() => picks([]));
+  assert.throws(() => picks([{ path: '/etc/passwd' }]));
+  assert.throws(() => picks([{ path: '/content/dam/x/a', variations: ['bad name'] }]));
+});
+
+test('inserted section: section breaks, the block as a table, Section Metadata with Fragment and Variation', async () => {
+  const { sectionInsert } = await import('../site/tools/content-fragments/advisor.js');
+  const html = sectionInsert('<div class="cohort-hero dark"><div><div><h2>Hi</h2></div></div><div><div>a</div><div>b</div></div></div>', { path: '/content/dam/x/a', variation: 'member' }, DOMParser);
+  assert.ok(html.startsWith('<hr><table><tr><td colspan="2">cohort-hero (dark)</td></tr><tr><td><h2>Hi</h2></td></tr><tr><td>a</td><td>b</td></tr></table>'));
+  assert.match(html, /<td colspan="2">section-metadata<\/td><\/tr><tr><td>Fragment<\/td><td>\/content\/dam\/x\/a<\/td><\/tr><tr><td>Variation<\/td><td>member<\/td><\/tr><\/table><hr>$/);
+  assert.doesNotMatch(sectionInsert('<div class="hero"><div><div>x</div></div></div>', { path: '/content/dam/x/a', variation: 'master' }, DOMParser), /Variation/);
+});
