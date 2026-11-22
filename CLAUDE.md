@@ -39,6 +39,8 @@
 ```
 /
 ├── actions/cf/            # App Builder broker: index.js (HTTP, CORS), lib.js (validation, ops)
+├── actions/sync/          # sync service: AEM "fragment published" → pages updated (index.cjs I/O, lib.mjs logic)
+├── scripts/deploy-sync.mjs # deploys the sync service (inputs from .env; .env.example lists them)
 ├── bin/install.mjs        # site installer (npx github:AEMXSC/da-content-fragments install)
 ├── bin/lib.mjs            # installer logic, no I/O (test/install.test.mjs)
 ├── scripts/deploy.mjs     # zips and deploys the broker action (npm run deploy)

@@ -75,6 +75,14 @@ preview swap.
 
 Returns `{ data, etag }`, or `{ error }` with 401/403/404/409/422/428.
 
+## Sync service: AEM publish updates the pages
+
+Publishing a fragment in AEM updates and republishes the Edge Delivery pages that show it, on
+every site in the DA org whose Setup points at that AEM environment. It is an App Builder action
+run by AEM's "Content Fragment published" event; it reads the fragment from AEM publish and writes
+DA with its own server-to-server credential. How it works, what it needs and how to deploy it:
+[architecture.md, The sync service](docs/architecture.md#the-sync-service).
+
 ## Deploy a broker (any Adobe organization)
 
 Sites use a shared broker by default: the AEM XSC stage action,

@@ -238,6 +238,8 @@ together:
 | Type into a fragment section on the page, panel open | A few seconds later the panel saves that text to AEM author: the row says **Page edits saved to AEM** |
 | Open the panel on a page that differs from AEM | The row says **Page differs from AEM**. In the fragment, **Apply to page** puts AEM's version on the page; **Save page text to AEM** keeps the page's |
 | **Publish** in the panel | The fragment is published in AEM, then the page on the live site |
+| Edit and **publish in AEM's own editor** | Within about a minute, every page that shows the fragment is updated and published, on every site connected to that AEM environment. A page that also has someone's unpublished edits is updated in preview only, so those edits do not go live with it |
+| **Publish** the page from DA | The page goes live; the fragment in AEM is not published. The panel's row then shows **Changes not published** with its own **Publish** |
 
 - **What can be saved from the page:** a field that has its own line in the template (a name,
   a description, a price with its `$`). Where two fields share one line (season · category), the
@@ -245,10 +247,9 @@ together:
   Images, numbers and other non-text fields are edited in AEM (**Open in AEM**).
 - **In the editor's preview,** fragment sections are outlined and labelled "From AEM", as a
   reminder that their text belongs to AEM.
-- **Publishing in AEM's own editor, or the page from DA's Publish,** does not yet update the
-  other side. Next: a fragment published in AEM republishes the pages that use it, and a page
-  published from DA publishes its changed fragments in AEM. Until then, open the panel on the
-  page (it says the page differs) and use **Publish** there.
+- **Publishing in AEM updates the pages** through the sync service (see
+  [architecture.md](architecture.md#the-sync-service)), once it is set up for your AEM
+  environment and DA org. A site joins by running Setup: nothing else to configure.
 
 ## Troubleshooting
 

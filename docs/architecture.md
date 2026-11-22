@@ -197,6 +197,59 @@ mode, on the configured `advisor-folder`. On **Insert**:
   row's last cell gets a `colspan` for the rest of the table (`blockTable`). Blocks should drop
   empty cells anyway: see [Writing templates](../README.md#writing-templates).
 
+## The sync service
+
+Publishing a fragment in AEM updates the Edge Delivery pages that show it, with nobody in DA.
+An App Builder action, `da-cf-sync/fragment-published` (`actions/sync/`), runs on AEM's
+`aem.sites.contentFragment.published` event:
+
+```mermaid
+sequenceDiagram
+  participant A as AEM author
+  participant E as Adobe I/O Events
+  participant S as da-cf-sync action
+  participant P as AEM publish (public)
+  participant D as admin.da.live
+  participant H as admin.hlx.page
+  A->>E: fragment published (id, path, environment)
+  E->>S: event (signature checked by Adobe's relay)
+  S->>D: list the org's sites, read each config: keep sites whose author is this environment
+  loop each connected site
+    S->>D: walk the pages, keep those with a section showing the fragment
+    S->>P: GET /adobe/contentFragments/{id}[/variations/{v}]?references=direct (fresh copy)
+    S->>S: render with the site's template (panel's renderer and row merge)
+    S->>D: write the page (only if it changed)
+    S->>H: preview, then publish (unless the page has other unpublished edits)
+  end
+```
+
+- **No AEM credential.** The fragment is read from AEM publish, which serves it to anyone.
+  Asset ids in the delivery JSON become `/content/dam` paths (`references=direct`), long text is
+  unwrapped from `{ value, mimeType }`: the result is the data the panel gets from author, so the
+  page comes out exactly as the panel renders it.
+- **Fresh content.** AEM publish's CDN can still hold the copy from before the publish that sent
+  the event. A response whose `Last-Modified` is older than the event is fetched again
+  (uncached) every 10 s, for up to 90 s.
+- **Which sites.** Every site in the DA org(s) set at deploy (`CF_SYNC_ORGS`, default
+  `aemxsc`) whose `content-fragments` config names the event's author. A site joins by running
+  Setup.
+- **Other edits are not published.** Before writing, the page's text outside the fragment's
+  sections and metadata is compared with the live page. If they differ, someone has unpublished
+  work there: the page is written and previewed, not published.
+- **Unchanged pages are not touched**, and events other than "fragment published" are
+  acknowledged and ignored, so AEM does not retry them.
+- **Identity and access.**
+  - DA: the `da-cf-sync` OAuth server-to-server credential (Developer Console project
+    `dacontentfragments` / Stage). Its technical account is in the org's DA `permissions` sheet:
+    `/ + **`, write.
+  - Preview and publish: an org-level aem.live API key with the `publish` role.
+  - Secrets live in the git-ignored `.env` and are passed as action inputs, never logged.
+- **Deploy:** `node scripts/deploy-sync.mjs [orgs]` (`npm run deploy` is the broker). The event
+  registration (Developer Console → Event → AEM Sites → the environment → Content Fragment
+  published → Runtime action `da-cf-sync/fragment-published`) is set up once, in the console.
+- **Logic** is in `actions/sync/lib.mjs`, tested with mocks in `test/sync.test.mjs`; network and
+  credentials are in `actions/sync/index.cjs`.
+
 ## The panel's modules
 
 | Module | Job |
@@ -299,10 +352,14 @@ the new version.
 
 ## Known limits
 
-- **Publishing outside the panel does not sync yet.** A fragment published in AEM's editor
-  reaches pages only when someone applies it from the panel, and a page published from DA does
-  not publish its fragments in AEM. The sync service (AEM "fragment published" events and the
-  aem.live publish webhook, run as App Builder actions) is the next phase.
+- **DA's own Publish does not publish fragments in AEM.** Doing that without a signed-in user
+  needs the sync credential allow-listed on AEM author (a Cloud Manager config pipeline), left out
+  on purpose. The panel shows **Changes not published** with a **Publish** that does both.
+- **AEM event delivery is not guaranteed.** A lost event leaves pages until the next publish of
+  that fragment, or until someone opens the panel on the page (it says the page differs).
+- **The sync service walks each connected site's DA pages per publish** (about 25 s for two demo
+  sites). Fine for demo-sized sites; a query index of fragment references would replace the walk
+  for large ones.
 - **Page edits are saved back only while the panel is open.** The panel knows the page was
   edited (not AEM) because it sees the block change. Edits made while it is closed show as
   "Page differs from AEM" next time, and the author chooses.
