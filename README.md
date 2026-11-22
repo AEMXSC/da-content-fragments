@@ -3,8 +3,14 @@
 AEM Content Fragments in DA and Experience Workspace, for any EDS site and any AEM as a Cloud
 Service environment, with no per-environment CORS setup. Built on Mark Szulc's Content Fragment
 plugin for Fréscopa ([markszulc/frescopa26](https://github.com/markszulc/frescopa26/tree/main/tools/plugins/content-fragment),
-Apache-2.0); this repository makes it generic. Status: **design + broker (v0.1)**; panel, renderer
-and static delivery follow (see Roadmap).
+Apache-2.0); this repository makes it generic. Status: broker, panel, setup wizard, live preview
+and Content Advisor placement work; re-rendering pages when a fragment is published follows (see
+Roadmap).
+
+- **New here?** [Getting started](docs/getting-started.md): add the extension to a site, connect
+  it to AEM, and edit fragments, with screenshots.
+- **Developers:** [Architecture](docs/architecture.md): the parts, the broker's security model,
+  the flows, the modules, testing, deploying and extending.
 
 ## The problem it solves
 
@@ -161,7 +167,7 @@ the model path (`/conf/frescopa/settings/dam/cfm/models/frescopa-product` →
 
 ## Roadmap
 
-- v0.2 panel: On this page (fragment + variation per block or section), publication status,
+- v0.2 panel (done): On this page (fragment + variation per block or section), publication status,
   model-driven field editing per variation, editor links, Content Advisor picker; TSC first.
 - v0.3 renderer + static delivery (`materialize`), live mode block.
 - v0.4 I/O Events re-render on publish; AEM editor extension listing DA pages that use a fragment.
