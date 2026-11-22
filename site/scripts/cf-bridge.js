@@ -48,6 +48,8 @@ function flash(section) {
 function storedSection(body, path, variation) {
   const v = variation || 'master';
   return [...body.children].find((sec) => {
+    // .plain.html carries Section Metadata as data-* attributes on the section
+    if (sec.dataset.fragment === path && (sec.dataset.variation || 'master').toLowerCase() === v) return true;
     const meta = sec.querySelector(':scope > .section-metadata');
     if (meta) {
       const kv = Object.fromEntries([...meta.children].map((r) => [...r.children].map((c) => c.textContent.trim().toLowerCase())));
