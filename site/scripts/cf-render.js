@@ -12,10 +12,11 @@
  * `_path`, `_variation`, `_title`.
  */
 
+// templates quote attributes with double quotes, so an apostrophe needs no escaping
 const ESC = {
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;',
 };
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ESC[c]);
 const NAME = /^(?:\.|[\w-]+(?:\.[\w-]+)*)$/;
 
 function check(name) {
@@ -100,12 +101,39 @@ export function render(template, data) {
   return emit(parse(tokenize(String(template))), [data || {}]);
 }
 
-/** Management API fragment (or variation) → template data. */
-export function fragmentData(fragment, { path, variation } = {}) {
+const abs = (u, base) => (base && typeof u === 'string' && u.startsWith('/') ? `${base}${u}` : u);
+
+// "Label: /path. Label: /path." in a text field → [{ label, href }]; [] unless every sentence is one
+function labelledLinks(value) {
+  const parts = value.split('. ').map((s) => s.trim().replace(/\.$/, '')).filter(Boolean);
+  const links = parts.map((p) => {
+    const at = p.indexOf(': /');
+    return at > 0 && !p.slice(at + 2).includes(' ') ? { label: p.slice(0, at).trim(), href: p.slice(at + 2) } : null;
+  });
+  return links.length >= 2 && links.every(Boolean) ? links : [];
+}
+
+/**
+ * Management API fragment (or variation) → template data.
+ * - single values unwrapped, multi values kept as arrays;
+ * - `linkBase` (site config `link-base`, e.g. https://www.example.com) prefixes root-relative
+ *   values of fields whose name ends in `url`/`Url`/`href`;
+ * - a text field written as labelled links also gets `<name>_links` ([{ label, href }]) and
+ *   `<name>_haslinks`, so a template can render a link list instead of the raw text.
+ */
+export function fragmentData(fragment, { path, variation, linkBase = '' } = {}) {
   const data = { _path: path || fragment?.path || '', _variation: variation || 'master', _title: fragment?.title || '' };
   (fragment?.fields || []).forEach((f) => {
     const values = Array.isArray(f.values) ? f.values : [];
-    data[f.name] = f.multiple ? values : values[0] ?? '';
+    const value = f.multiple ? values : values[0] ?? '';
+    data[f.name] = /(url|href)$/i.test(f.name) ? abs(value, linkBase) : value;
+    if (typeof value === 'string') {
+      const links = labelledLinks(value).map((l) => ({ ...l, href: abs(l.href, linkBase) }));
+      if (links.length) {
+        data[`${f.name}_links`] = links;
+        data[`${f.name}_haslinks`] = true;
+      }
+    }
   });
   return data;
 }

@@ -9,6 +9,7 @@ import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { readRefs, readConfig } from './refs.js';
 import createBroker, { fieldPatch, editable, statusOf } from './broker.js';
 import { render, fragmentData } from '../../scripts/cf-render.js';
+import { applyToPage } from './apply.js';
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, attrs = {}, ...kids) => {
@@ -28,6 +29,20 @@ const templates = new Map();
 let broker;
 let config;
 let page;
+let sdk; // { context, token, actions }
+let live; // the editor's live document: { html, selection: { blockIndex }, editable }
+
+const linkBase = () => (config.settings['link-base'] || '').replace(/\/$/, '');
+
+/** preview the page (EDS admin allows this origin), after the editor saved it */
+async function previewPage() {
+  const { org, repo } = sdk.context;
+  const p = sdk.context.path.replace(/\/index$/, '/');
+  const res = await fetch(`https://admin.hlx.page/preview/${org}/${repo}/main${p}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${sdk.token}`, 'x-content-source-authorization': `Bearer ${sdk.token}` },
+  });
+  if (!res.ok) throw new Error(`Applied in the editor, but preview returned HTTP ${res.status}.`);
+}
 // BroadcastChannel only connects documents of the same origin (this site's preview): no origin
 // check is needed, and every message is still checked for this page and a /content/dam path
 const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('da-content-fragments') : null;
@@ -62,13 +77,29 @@ async function openEditor(ref, fragment, host) {
   let snapshot;
   let draft = {};
   const tpl = await template(fragment).catch((e) => { say(e.message, 'error'); return null; });
+  // one rendering for the live preview and for Apply: the same template and data
+  const rendered = () => {
+    const fields = snapshot.data.fields.map((f) => (f.name in draft ? { ...f, values: [draft[f.name]] } : f));
+    return render(tpl, fragmentData({ ...snapshot.data, fields }, { path: ref.path, variation: current, linkBase: linkBase() }));
+  };
   const preview = () => {
     if (!tpl) return;
-    const fields = snapshot.data.fields.map((f) => (f.name in draft ? { ...f, values: [draft[f.name]] } : f));
     post({
-      type: 'render', path: ref.path, variation: current, html: render(tpl, fragmentData({ ...snapshot.data, fields }, { path: ref.path, variation: current })),
+      type: 'render', path: ref.path, variation: current, html: rendered(),
     });
   };
+  const apply = el('button', {
+    type: 'button', text: 'Apply to page', hidden: true, title: 'Click inside this block in the editor first',
+    onclick: async () => {
+      apply.disabled = true;
+      try {
+        say(await applyToPage({
+          actions: sdk.actions, live, ref: { ...ref, variation: current }, renderedHtml: rendered(), preview: previewPage,
+        }), 'ok');
+        apply.hidden = true;
+      } catch (e) { say(e.message, 'error'); } finally { apply.disabled = false; }
+    },
+  });
   let timer;
   const draw = () => {
     const form = el('form', { class: 'fields', onsubmit: (e) => e.preventDefault() });
@@ -95,11 +126,12 @@ async function openEditor(ref, fragment, host) {
         save.disabled = true;
         try {
           const r = await broker.patch(fragment.id, current, snapshot.etag, ops);
-          say(`Saved ${Object.keys(draft).length} field(s) to ${current === 'master' ? 'Main' : current} on author. Publish in AEM to update the live fragment.`, 'ok');
           draft = {};
           snapshot = await broker.get(fragment.id, current); // fresh values and ETag
           if (r.etag && !snapshot.etag) snapshot.etag = r.etag;
           draw();
+          apply.hidden = !tpl;
+          say(`Saved to ${current === 'master' ? 'Main' : current} on AEM author.${tpl ? ' To update this page: click inside the block in the editor, then "Apply to page".' : ''} Publish in AEM to update the live fragment.`, 'ok');
         } catch (e) {
           say(e.message, 'error');
         } finally { save.disabled = false; }
@@ -114,7 +146,7 @@ async function openEditor(ref, fragment, host) {
         onchange: async (e) => { current = e.target.value; draft = {}; snapshot = await broker.get(fragment.id, current); draw(); preview(); },
       }, variations.map((v) => el('option', { value: v.name, selected: v.name === current, text: v.title || v.name })))),
       form,
-      el('div', { class: 'actions' }, save, reset, el('a', {
+      el('div', { class: 'actions' }, save, apply, reset, el('a', {
         href: editorUrl(fragment.id), target: '_blank', rel: 'noopener noreferrer', text: 'Open in AEM',
       })),
       tpl ? el('p', { class: 'muted', text: 'The preview updates as you type. Nothing is saved until "Save to AEM".' })
@@ -153,8 +185,22 @@ function row(ref) {
   return el('li', { class: 'ref' }, el('div', { class: 'head' }, light, toggle), el('p', { class: 'path', text: ref.path }), body);
 }
 
+// the editor's live document, when the host sends one (within ~2 s of subscribing)
+function liveDocument(actions) {
+  return new Promise((resolve) => {
+    if (!actions?.subscribeLiveDocument) { resolve(null); return; }
+    let first = true;
+    actions.subscribeLiveDocument((snapshot) => {
+      live = snapshot;
+      if (first) { first = false; resolve(snapshot); }
+    });
+    setTimeout(() => resolve(live || null), 2000);
+  });
+}
+
 async function init() {
-  const { context, token } = await DA_SDK;
+  sdk = await DA_SDK;
+  const { context, token, actions } = sdk;
   const getToken = () => token;
   page = pageKey(context.path);
   const headers = { Authorization: `Bearer ${token}` };
@@ -163,9 +209,14 @@ async function init() {
   config = readConfig(await cfg.json());
   broker = createBroker({ url: config.settings.broker, author: config.settings.author, getToken });
   $('#author').textContent = broker.author;
-  const doc = await fetch(`https://admin.da.live/source/${context.org}/${context.repo}${context.path.replace(/\/$/, '/index')}.html`, { headers });
-  if (!doc.ok) throw new Error(`The page source returned HTTP ${doc.status}.`);
-  const refs = readRefs(await doc.text());
+  // what the author has open now (the live editor document), else the stored source
+  let html = (await liveDocument(actions))?.html;
+  if (!html) {
+    const doc = await fetch(`https://admin.da.live/source/${context.org}/${context.repo}${context.path.replace(/\/$/, '/index')}.html`, { headers });
+    if (!doc.ok) throw new Error(`The page source returned HTTP ${doc.status}.`);
+    html = await doc.text();
+  }
+  const refs = readRefs(html);
   $('#count').textContent = refs.length;
   $('#refs').replaceChildren(...refs.map(row));
   say(refs.length ? '' : 'No Content Fragment on this page: add Fragment / Variation rows to a section\'s metadata, or a Content Fragment block.');

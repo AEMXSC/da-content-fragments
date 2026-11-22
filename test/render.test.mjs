@@ -41,3 +41,16 @@ test('field patch: test + replace only for changed editable fields', () => {
   assert.ok(!editable({ type: 'content-reference', values: ['/x'] }));
   assert.equal(statusOf({ status: 'MODIFIED' }).tone, 'warn');
 });
+
+test('link base and labelled links', async () => {
+  const d = fragmentData({ fields: [
+    { name: 'ctaUrl', values: ['/tsc/sale'] }, { name: 'secondaryUrl', values: ['https://other.example/x'] },
+    { name: 'body', values: ['Find a store: /tsc/store-locator. Weekly ad: /tsc/cms/digital-flyer.'] },
+    { name: 'plain', values: ['Shop now: great deals. Nothing else.'] },
+  ] }, { linkBase: 'https://www.example.com' });
+  assert.equal(d.ctaUrl, 'https://www.example.com/tsc/sale');
+  assert.equal(d.secondaryUrl, 'https://other.example/x');
+  assert.deepEqual(d.body_links, [{ label: 'Find a store', href: 'https://www.example.com/tsc/store-locator' }, { label: 'Weekly ad', href: 'https://www.example.com/tsc/cms/digital-flyer' }]);
+  assert.equal(d.body_haslinks, true);
+  assert.equal(d.plain_links, undefined);
+});
