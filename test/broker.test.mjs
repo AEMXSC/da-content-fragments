@@ -33,6 +33,10 @@ test('origins: da.live and EDS hosts only', () => {
   assert.ok(originAllowed('https://da.live'));
   assert.ok(originAllowed('https://main--tsc--aemxsc.aem.page'));
   assert.ok(originAllowed('http://localhost:3000'));
+  assert.ok(originAllowed('https://main--tsc--aemxsc.preview.da.live'));
+  assert.ok(originAllowed('https://main--tsc--aemxsc.stage-preview.da.live'));
+  assert.ok(!originAllowed('https://preview.da.live.evil.com'));
+  assert.ok(!originAllowed('https://x.preview.da.live'));
   assert.ok(!originAllowed('https://evil.example.com'));
   assert.ok(!originAllowed('https://da.live.evil.com'));
   assert.ok(!originAllowed('https://a.b--tsc--aemxsc.aem.page'));

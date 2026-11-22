@@ -18,6 +18,8 @@ const MODEL_ID = /^[A-Za-z0-9_-]{8,400}={0,2}$/;
 const DEFAULT_ORIGINS = [
   '^https://da\\.live$',
   '^https://[a-z0-9-]+--[a-z0-9-]+--[a-z0-9-]+\\.aem\\.(page|live)$',
+  // Experience Workspace serves panel extensions and the page preview from DA's live-preview proxy
+  '^https://[a-z0-9-]+--[a-z0-9-]+--[a-z0-9-]+\\.(stage-)?preview\\.da\\.live$',
   '^http://localhost:\\d{2,5}$',
 ];
 

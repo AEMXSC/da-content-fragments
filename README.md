@@ -23,7 +23,8 @@ and its own published-content endpoint.
 1. **Broker, not CORS.** The panel calls one App Builder web action (`actions/cf`) with the
    signed-in DA user's IMS token. The action calls AEM author server to server with that same
    token, so AEM permissions still apply. CORS is configured once, on the action, for `da.live`,
-   `*--*--*.aem.page|live` and localhost. The action only calls an author host that Adobe's
+   `*--*--*.aem.page|live`, DA's live-preview proxy `*--*--*.preview.da.live` (where Experience
+   Workspace runs panel extensions and the page preview) and localhost. The action only calls an author host that Adobe's
    repository discovery lists for that token, refuses anything else before any request, writes
    only fields/title/description with the caller's strong ETag (`If-Match`) and a fresh CSRF
    token, stores nothing and never logs tokens. One deployment serves every site.
@@ -86,7 +87,8 @@ npm run deploy                    # zip + aio rt action update, same settings as
 
 1. Copy `site/` into the EDS repo: `tools/content-fragments/*` (panel), `scripts/cf-render.js`,
    `scripts/cf-bridge.js`, and per model a template (e.g. `tools/content-fragments/templates/*.html`).
-2. In `scripts.js` `loadDelayed()`, in a preview frame only:
+2. In `scripts.js` `loadDelayed()`, in a preview frame only (`window.self !== window.top` and a
+   `*.aem.page` or `*.preview.da.live` host; Experience Workspace previews on the latter):
    `import('./cf-bridge.js').then((m) => m.default({ decorateButtons, decorateIcons, decorateBlock, loadBlock }))`.
 3. DA config (`https://da.live/config#/<org>/<site>`):
    - `library`: `Content Fragments` → `/tools/content-fragments/index.html`, experience `inline`;
