@@ -160,8 +160,10 @@ export default function startBridge(hooks = {}) {
   if (window.self === window.top || typeof BroadcastChannel === 'undefined') return;
   const channel = new BroadcastChannel(CHANNEL);
   const reply = (msg) => channel.postMessage({ page: page(), ...msg });
-  channel.addEventListener('message', async ({ data }) => {
-    if (!data || data.page !== page() || !/^\/content\/dam\//.test(data.path || '')) return;
+  channel.addEventListener('message', async ({ origin, data }) => {
+    if (origin !== window.location.origin || !data || data.page !== page()) return;
+    if (data.type === 'ping') { reply({ type: 'ready' }); return; }
+    if (!/^\/content\/dam\//.test(data.path || '')) return;
     const { path, variation } = data;
     const sections = sectionsFor(path, variation);
     try {
@@ -179,6 +181,12 @@ export default function startBridge(hooks = {}) {
         reply({
           type: 'rendered', path, variation, count: sections.length,
         });
+        // layout view keeps the preview in step with the document: if it redraws the block, say so
+        const expect = new DOMParser().parseFromString(data.html, 'text/html').body.textContent.replace(/\s+/g, ' ').trim();
+        setTimeout(() => {
+          const shown = sections.map((s) => s.textContent.replace(/\s+/g, ' ')).join(' ');
+          if (sections.length && expect && !shown.includes(expect.slice(0, 60))) reply({ type: 'reverted', path, variation });
+        }, 1200);
       }
     } catch (e) {
       reply({

@@ -507,3 +507,12 @@ main textarea.nx-input {
   background: var(--s2-gray-25, #fff);
   border-top: 1px solid var(--s2-gray-200, #e1e1e1);
 }
+
+.preview-state {
+  margin-top: calc(-1 * var(--s2-spacing-100, 8px));
+}
+
+.setup-mode .preview-state,
+.advisor-mode .preview-state {
+  display: none;
+}

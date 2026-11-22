@@ -61,6 +61,17 @@ const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('
 
 function post(msg) { channel?.postMessage({ page, ...msg }); }
 
+let previewConnected = false;
+let renderTimer;
+function previewState(on) {
+  previewConnected = previewConnected || on;
+  const s = $('#preview-state');
+  s.dataset.tone = previewConnected ? 'ok' : 'off';
+  s.lastElementChild.textContent = previewConnected
+    ? 'Live preview connected'
+    : 'Live preview not connected: the page preview is not running cf-bridge.js, or is on another origin. Reload the page preview.';
+}
+
 /** the model's template: saved by setup (`html`), a template file, else the starter (cf-card) */
 async function template(fragment) {
   const m = config.models.find((x) => [fragment.model?.path, fragment.model?.id, fragment.model?.name].includes(x.model)
@@ -108,6 +119,8 @@ async function openEditor(ref, fragment, host) {
     post({
       type: 'render', path: ref.path, variation: current, html: rendered(),
     });
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(() => say('The page preview did not answer, so it shows the saved page. Save to AEM, then Apply to page to see the change.', 'error'), 4000);
   };
   const apply = el('button', {
     type: 'button', class: 'nx-btn-primary', text: 'Apply to page', hidden: true, title: 'Click inside this block in the editor first',
@@ -300,9 +313,15 @@ async function init() {
   $('#browse').onclick = () => actions.showPanel?.('content-advisor');
   channel?.addEventListener('message', ({ origin, data }) => {
     if (origin !== window.location.origin || data?.page !== page) return;
+    if (data.type === 'ready') previewState(true);
+    if (data.type === 'rendered') clearTimeout(renderTimer);
     if (data.type === 'error') say(`Preview: ${data.message}`, 'error');
     if (data.type === 'rendered' && !data.count) say('This fragment is not visible in the current preview (another cohort or variation may be showing).');
+    if (data.type === 'reverted') say('Layout view redrew this block from the page document, so the preview shows the saved page. Save to AEM, then Apply to page to see the change.', 'error');
   });
+  // is the page preview listening? (the site loads cf-bridge.js in its preview frames)
+  post({ type: 'ping' });
+  setTimeout(() => { if (!previewConnected) previewState(false); }, 5000);
 }
 
 init().catch((e) => say(e.message, 'error'));
