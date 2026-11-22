@@ -112,7 +112,8 @@ function resolveLink(u, base, redirects) {
   return base ? `${base}${u}` : u;
 }
 
-// "Label: /path. Label: /path." in a text field → [{ label, href }]; [] unless every sentence is one
+// "Label: /path. Label: /path." in a text field → [{ label, href }];
+// [] unless every sentence is one
 function labelledLinks(value) {
   const parts = value.split('. ').map((s) => s.trim().replace(/\.$/, '')).filter(Boolean);
   const links = parts.map((p) => {
@@ -144,7 +145,8 @@ export function fragmentData(fragment, {
     if (f.type === 'content-reference') data[f.name] = Array.isArray(value) ? value.map(asset) : asset(value);
     else data[f.name] = /(url|href)$/i.test(f.name) ? resolveLink(value, linkBase, redirects) : value;
     if (typeof value === 'string') {
-      const links = labelledLinks(value).map((l) => ({ ...l, href: resolveLink(l.href, linkBase, redirects) }));
+      const links = labelledLinks(value)
+        .map((l) => ({ ...l, href: resolveLink(l.href, linkBase, redirects) }));
       if (links.length) {
         data[`${f.name}_links`] = links;
         data[`${f.name}_haslinks`] = true;

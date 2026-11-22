@@ -48,12 +48,20 @@ const EDITOR_ATTR = /^(data-prose-|data-image-|data-block-|data-cursor-|data-aue
 const editorAttrs = (node) => [...(node.attributes || [])].filter((a) => EDITOR_ATTR.test(a.name));
 
 function syncAttributes(live, next) {
-  [...live.attributes].forEach((a) => { if (!EDITOR_ATTR.test(a.name) && !next.hasAttribute(a.name)) live.removeAttribute(a.name); });
-  [...next.attributes].forEach((a) => { if (!EDITOR_ATTR.test(a.name) && live.getAttribute(a.name) !== a.value) live.setAttribute(a.name, a.value); });
+  [...live.attributes].forEach((a) => {
+    if (!EDITOR_ATTR.test(a.name) && !next.hasAttribute(a.name)) live.removeAttribute(a.name);
+  });
+  [...next.attributes].forEach((a) => {
+    if (!EDITOR_ATTR.test(a.name) && live.getAttribute(a.name) !== a.value) {
+      live.setAttribute(a.name, a.value);
+    }
+  });
 }
 
 function replaceKeepingIndexes(live, next) {
-  if (next.nodeType === Node.ELEMENT_NODE) editorAttrs(live).forEach((a) => next.setAttribute(a.name, a.value));
+  if (next.nodeType === Node.ELEMENT_NODE) {
+    editorAttrs(live).forEach((a) => next.setAttribute(a.name, a.value));
+  }
   live.replaceWith(next);
 }
 
@@ -69,14 +77,21 @@ function align(old, kids) {
   const lcs = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i -= 1) {
     for (let j = m - 1; j >= 0; j -= 1) {
-      lcs[i][j] = kind(old[i]) === kind(kids[j]) ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+      lcs[i][j] = kind(old[i]) === kind(kids[j])
+        ? lcs[i + 1][j + 1] + 1
+        : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
     }
   }
   const pairs = new Map();
   let i = 0;
   let j = 0;
   while (i < n && j < m) {
-    if (kind(old[i]) === kind(kids[j])) { pairs.set(j, i); i += 1; j += 1; } else if (lcs[i + 1][j] >= lcs[i][j + 1]) i += 1; else j += 1;
+    if (kind(old[i]) === kind(kids[j])) {
+      pairs.set(j, i);
+      i += 1;
+      j += 1;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) i += 1;
+    else j += 1;
   }
   return pairs;
 }
@@ -121,7 +136,8 @@ function storedSection(body, path, variation) {
     if (sec.dataset.fragment === path && (sec.dataset.variation || 'master').toLowerCase() === v) return true;
     const meta = sec.querySelector(':scope > .section-metadata');
     if (meta) {
-      const kv = Object.fromEntries([...meta.children].map((r) => [...r.children].map((c) => c.textContent.trim().toLowerCase())));
+      const cells = (r) => [...r.children].map((c) => c.textContent.trim().toLowerCase());
+      const kv = Object.fromEntries([...meta.children].map(cells));
       if (kv.fragment === path.toLowerCase() && (kv.variation || 'master') === v) return true;
     }
     return [...sec.querySelectorAll(':scope > .content-fragment')].some((b) => b.textContent.includes(path));
