@@ -8,17 +8,22 @@
  * the block, then Apply.
  */
 
-/** the block a reference points at in the live document: { index, block } or null */
+import { sectionMeta } from './refs.js';
+
+/**
+ * The block a reference points at in the live document: { index, block } or null. `index` is the
+ * block's ordinal among `div[data-block-index]` (every non-metadata block, document order), which is
+ * how the editor counts `selection.blockIndex`; the attribute's own value is an editor position.
+ */
 export function findBlock(html, { path, variation }, DOMParserImpl = globalThis.DOMParser) {
   const doc = new DOMParserImpl().parseFromString(html, 'text/html');
   const blocks = [...doc.querySelectorAll('div[data-block-index]')];
   const v = variation || 'master';
   const main = doc.querySelector('main') || doc.body;
   const section = [...main.children].find((sec) => {
-    const meta = sec.querySelector(':scope > .section-metadata');
-    if (!meta) return false;
-    const kv = Object.fromEntries([...meta.children].map((r) => [...r.children].map((c) => c.textContent.trim().toLowerCase())));
-    return kv.fragment === path.toLowerCase() && (kv.variation || 'master') === v;
+    const meta = sectionMeta(sec);
+    return String(meta.fragment || '').trim().toLowerCase() === path.toLowerCase()
+      && (String(meta.variation || '').trim().toLowerCase() || 'master') === v;
   });
   const block = section && [...section.querySelectorAll(':scope > div[data-block-index]')].find((b) => !b.classList.contains('section-metadata'));
   return block ? { index: blocks.indexOf(block), block } : null;

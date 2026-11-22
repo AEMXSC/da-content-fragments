@@ -19,6 +19,23 @@ function rowsOf(block) {
   return [...block.children].map((row) => [...row.children].map((c) => c.textContent.trim()));
 }
 
+/**
+ * A section's Fragment / Variation, from either form a page arrives in: a Section Metadata block
+ * (the stored DA document), or data-* attributes on the section (the editor's live document and
+ * .plain.html, where the metadata block is applied and removed).
+ * @returns {{ fragment?: string, variation?: string }}
+ */
+export function sectionMeta(section) {
+  const block = section.querySelector(':scope > .section-metadata');
+  if (block) {
+    return Object.fromEntries(rowsOf(block).filter((r) => r.length >= 2).map(([k, v]) => [norm(k), v]));
+  }
+  return {
+    fragment: section.getAttribute('data-fragment') || undefined,
+    variation: section.getAttribute('data-variation') || undefined,
+  };
+}
+
 /** @returns {{ path, variation, section, kind }[]} in document order, unique by path+variation */
 export function readRefs(html, DOMParserImpl = globalThis.DOMParser) {
   const doc = new DOMParserImpl().parseFromString(html, 'text/html');
@@ -37,10 +54,8 @@ export function readRefs(html, DOMParserImpl = globalThis.DOMParser) {
     });
   };
   [...main.children].forEach((section, i) => {
-    section.querySelectorAll(':scope > .section-metadata').forEach((meta) => {
-      const kv = Object.fromEntries(rowsOf(meta).filter((r) => r.length >= 2).map(([k, v]) => [norm(k), v]));
-      if (kv.fragment) add(kv.fragment, kv.variation, i, 'section');
-    });
+    const meta = sectionMeta(section);
+    if (meta.fragment) add(meta.fragment, meta.variation, i, 'section');
     section.querySelectorAll(':scope > .content-fragment').forEach((block) => {
       const rows = rowsOf(block);
       const variationRow = rows.find((r) => norm(r[0]) === 'variation' && r[1]);
