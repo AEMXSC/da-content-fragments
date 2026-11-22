@@ -4,6 +4,9 @@
   "private": true,
   "description": "AEM Content Fragments in DA / Experience Workspace: a CORS-free broker, a model-driven panel, one renderer for preview and live.",
   "license": "Apache-2.0",
+  "bin": {
+    "da-content-fragments": "bin/install.mjs"
+  },
   "scripts": {
     "test": "node --test test/",
     "deploy": "node scripts/deploy.mjs"
