@@ -52,8 +52,8 @@ and its own published-content endpoint.
    project to re-render the static blocks that use the fragment (usage metadata, as in
    Fréscopa) and re-preview those pages.
 
-Each site gets a vendored copy of the panel and block (installed by a script, as Cedric's
-homepage-cohorts tools are): EDS code on `aem.live` carries no CORS header, so a shared module
+Each site gets its own copy of the panel and block (installed by `npx
+github:AEMXSC/da-content-fragments install`, see [Install on a site](#install-on-a-site)): EDS code on `aem.live` carries no CORS header, so a shared module
 cannot be imported across sites, and the panel must share the preview's origin for the live
 preview swap.
 
@@ -63,7 +63,8 @@ preview swap.
 
 | `op` | Fields | AEM call |
 |---|---|---|
-| `list` | `author, path, limit?` | `GET /adobe/sites/cf/fragments?path=` |
+| `list` | `author, path, limit?, cursor?, projection?` | `GET /adobe/sites/cf/fragments?path=` (subfolders included) |
+| `folders` | `author, path?, cursor?` | `GET /adobe/folders?path=` |
 | `get` | `author, id, variation?` | `GET /adobe/sites/cf/fragments/{id}[/variations/{v}]?references=direct-hydrated` |
 | `variations` | `author, id` | `GET …/fragments/{id}/variations` |
 | `model` | `author, model` | `GET /adobe/sites/cf/models/{id}` |
@@ -73,18 +74,34 @@ preview swap.
 
 Returns `{ data, etag }`, or `{ error }` with 401/403/404/409/422/428.
 
-## Deploy (XSC organization)
+## Deploy a broker (any Adobe organization)
 
-Deployed: project `dacontentfragments` (AEM XSC Showcase), workspace Stage:
-`https://3635370-dacontentfragments-stage.adobeioruntime.net/api/v1/web/da-cf/cf`.
+Sites use a shared broker by default: the AEM XSC stage action,
+`https://3635370-dacontentfragments-stage.adobeioruntime.net/api/v1/web/da-cf/cf`. It only
+passes each user's own token to that user's own AEM author, so no data crosses organizations.
+An organization that wants to run its own broker deploys it to its own App Builder project:
 
-```bash
-aio login
-aio console org select <org id> && aio console project select dacontentfragments && aio console workspace select Stage
-aio app use --global --no-input   # writes .env/.aio (git-ignored)
-npm test
-npm run deploy                    # zip + aio rt action update, same settings as app.config.yaml
-```
+1. In [Adobe Developer Console](https://developer.adobe.com/console), create a project in your
+   organization from the App Builder template (any name; it needs I/O Runtime), with a
+   workspace such as Stage or Production.
+2. Deploy from a clone of this repository:
+
+   ```bash
+   aio login
+   aio console org select <your org id>
+   aio console project select <your project>
+   aio console workspace select <your workspace>
+   aio app use --global --no-input   # writes .env/.aio (git-ignored)
+   npm test
+   npm run deploy                    # zips actions/cf and updates the action; prints its URL
+   ```
+
+3. Point sites at it: in the panel, **Setup** → **More settings** → broker, or the `broker` key in
+   the site's `content-fragments` config sheet.
+
+The action is `da-cf/cf` in your workspace's namespace:
+`https://<namespace>.adobeioruntime.net/api/v1/web/da-cf/cf`. To allow more browser origins than
+the defaults, set the action input `ALLOWED_ORIGINS` (comma-separated regular expressions).
 
 `aio app deploy` works too where its webpack build runs; on Windows with Node 26 it stalled at
 "Building actions". The action needs no bundling (two CommonJS files), so `npm run deploy`
@@ -92,14 +109,27 @@ npm run deploy                    # zip + aio rt action update, same settings as
 
 ## Install on a site
 
-1. Copy `site/` into the EDS repo: `tools/content-fragments/*` (panel), `scripts/cf-render.js`,
-   `scripts/cf-bridge.js` and `blocks/cf-card/` (the default layout for models without a template).
-2. In `scripts.js` `loadDelayed()`, in a preview frame only (`window.self !== window.top` and a
-   `*.aem.page` or `*.preview.da.live` host; Experience Workspace previews on the latter):
-   `import('./cf-bridge.js').then((m) => m.default({ decorateButtons, decorateIcons, decorateBlock, loadBlock }))`.
-3. Add one row to the site's DA config `library` sheet: `Content Fragments` →
-   `/tools/content-fragments/index.html`. Open the panel in Experience Workspace: the first time,
-   it runs **Setup** (no other sheet editing):
+1. In the root of the site's repo, run:
+
+   ```bash
+   npx github:AEMXSC/da-content-fragments install            # --dry-run shows what it would change
+   ```
+
+   It copies `tools/content-fragments/` (panel), `scripts/cf-render.js`, `scripts/cf-bridge.js`
+   and `blocks/cf-card/` (the default layout for models without a template); a site's own
+   `templates/` folder is kept. It also:
+   - wires the bridge into `loadDelayed()` in `scripts.js` (preview frames only);
+   - adds the panel to the lint ignore files;
+   - signs in with Adobe's da-auth-helper and adds the `Content Fragments` row to the site's DA
+     `library` sheet.
+
+   The DA org and site come from `fstab.yaml` or the git remote (`--org`, `--site` override).
+   Anything it cannot do safely it lists as a by-hand step. Run it again to update. A coding
+   agent can do the same, and the manual steps are in
+   [getting-started.md](docs/getting-started.md#1-add-the-extension-to-a-site).
+2. Commit and push the site repo.
+3. Open the panel in Experience Workspace: the first time, it runs **Setup** (no other sheet
+   editing):
    1. pick the AEM author from your environments (Adobe repository discovery) and a Content
       Fragment folder (open folders level by level; fragments in subfolders count too);
    2. review the models found there (every fragment in the folder is read): a model gets the
@@ -168,7 +198,8 @@ the model path (`/conf/frescopa/settings/dam/cfm/models/frescopa-product` →
 ## Roadmap
 
 - v0.2 panel (done): On this page (fragment + variation per block or section), publication status,
-  model-driven field editing per variation, editor links, Content Advisor picker; TSC first.
+  model-driven field editing per variation, editor links, Content Advisor picker, setup wizard,
+  installer.
 - v0.3 renderer + static delivery (`materialize`), live mode block.
 - v0.4 I/O Events re-render on publish; AEM editor extension listing DA pages that use a fragment.
 

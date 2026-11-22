@@ -39,6 +39,8 @@
 ```
 /
 ├── actions/cf/            # App Builder broker: index.js (HTTP, CORS), lib.js (validation, ops)
+├── bin/install.mjs        # site installer (npx github:AEMXSC/da-content-fragments install)
+├── bin/lib.mjs            # installer logic, no I/O (test/install.test.mjs)
 ├── scripts/deploy.mjs     # zips and deploys the broker action (npm run deploy)
 ├── site/                  # copied into each EDS site repo (vendored, e.g. AEMXSC/tsc)
 │   ├── tools/content-fragments/   # the panel: index.html, panel.js, editor.js, setup.js,

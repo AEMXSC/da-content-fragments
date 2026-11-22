@@ -268,10 +268,17 @@ production change for them. Run the tests, and have the owner review the change 
 
 ### Update a site
 
-The site keeps a copy of `site/`. After a change here:
-1. Copy the changed files into the site repo at the same paths.
-2. Keep the commit wording the same as here.
-3. Open a pull request on the site repo.
+The site keeps a copy of `site/`. After a change here, run the installer again in the site
+repo (`npx github:AEMXSC/da-content-fragments install`, or `node <this repo>/bin/install.mjs`
+for an unpushed change). It updates the changed files and leaves the rest. Commit with the
+same wording as here, through a pull request where the site requires one.
+
+The installer is `bin/install.mjs`, with its logic in `bin/lib.mjs` (tested in
+`test/install.test.mjs`):
+- **The `scripts.js` edit** imports each hook from `aem.js` only when `aem.js` exports it and
+  `scripts.js` does not define it.
+- **The DA library row** is added through `admin.da.live/config`, with a token from
+  da-auth-helper. The token is never printed or stored.
 
 Experience Workspace caches the panel: authors may need a hard reload (Ctrl+Shift+R) to get
 the new version.

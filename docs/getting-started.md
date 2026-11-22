@@ -35,7 +35,54 @@ uses the shared AEM XSC broker (see [architecture.md](architecture.md#the-broker
 
 ## 1. Add the extension to a site
 
-In the site's GitHub repository:
+In the root of the site's repository (Node 22 or later), run:
+
+```bash
+npx github:AEMXSC/da-content-fragments install
+```
+
+It works on any site; nothing in it is specific to one organization.
+- **Files:** copies the panel, the renderer, the bridge and the default `cf-card` block into the
+  site. The site's own `tools/content-fragments/templates/` folder is never touched.
+- **`scripts.js`:** loads the bridge in `loadDelayed()`, importing only what the site does not
+  already have.
+- **Lint:** adds the panel folder to the site's lint ignore files.
+- **DA library:** signs you in to DA (a browser window may open) and adds the
+  **Content Fragments** row to the site's library.
+
+The DA org and site come from `fstab.yaml` or the repository's git remote (for
+`github.com/acme/website`, that is `acme/website`). If they differ, add
+`--org <org> --site <site>`.
+
+- **Something it cannot do safely**, such as a `scripts.js` far from the boilerplate: it lists
+  that as a by-hand step instead of guessing.
+- **Preview first:** `--dry-run` shows what it would change and changes nothing.
+- **Updates:** run it again whenever you want a newer version; unchanged files stay as they are.
+
+Then commit and push the site repository, and go on to [part 2](#2-connect-the-site-to-aem).
+
+### With a coding agent
+
+In Claude Code, GitHub Copilot or another coding agent, opened on the site's repository:
+
+> Install the Content Fragments extension in this repository: run
+> `npx github:AEMXSC/da-content-fragments install --dry-run`, show me what it will change, then
+> run it without `--dry-run`. Do any step it lists under "To do by hand", following
+> https://github.com/AEMXSC/da-content-fragments/blob/main/docs/getting-started.md. Run the
+> site's lint, then show me the diff before committing.
+
+### Optional: a look per model
+
+Without a template, a model's fragments use the generic `cf-card` block. For a model that needs
+its own design:
+1. Add a block for it (say `blocks/cf-product/`).
+2. Add a template `tools/content-fragments/templates/<model name>.html`.
+
+Setup offers that template automatically. See [Writing templates](../README.md#writing-templates).
+
+### Without the installer
+
+The installer does these steps. To do them by hand, in the site's repository:
 
 1. Copy these folders and files from this repository's `site/` folder into the site repository,
    at the same paths:
@@ -43,11 +90,12 @@ In the site's GitHub repository:
    - `scripts/cf-render.js` and `scripts/cf-bridge.js`;
    - `blocks/cf-card/`: the default look for models that have no template.
 2. In `scripts/scripts.js`, load the bridge in `loadDelayed()`. It only runs when the page is
-   shown inside the editor's preview:
+   shown inside the editor's preview. Import from `aem.js` only the names the file does not
+   already define; the current boilerplate defines `decorateButtons` in `scripts.js` itself:
 
    ```js
    import {
-     decorateButtons, decorateIcons, decorateBlock, loadBlock, /* ...what is already imported */
+     decorateIcons, decorateBlock, loadBlock, /* ...what is already imported */
    } from './aem.js';
 
    function loadDelayed() {
@@ -62,13 +110,9 @@ In the site's GitHub repository:
    }
    ```
 
-3. If the site lints its code, exclude the copied panel (add `tools/content-fragments/` to
-   `.eslintignore` and `.stylelintignore`).
-4. Optional, and worth it: give each fragment model its own look. Add a block for it (say
-   `blocks/cf-product/`) and a template `tools/content-fragments/templates/<model name>.html`.
-   Setup offers that template automatically. See
-   [Writing templates](../README.md#writing-templates).
-5. In DA, open the site's configuration (`https://da.live/config#/<org>/<site>`). In the
+3. If the site lints its code, exclude the copied panel. Add `tools/content-fragments/` to
+   `.eslintignore` and `.stylelintignore`, or to `ignores` in a flat `eslint.config.mjs`.
+4. In DA, open the site's configuration (`https://da.live/config#/<org>/<site>`). In the
    `library` sheet, add a row with title `Content Fragments` and path
    `/tools/content-fragments/index.html`. Push the code, then go on to part 2.
 
@@ -107,7 +151,7 @@ links that start with `/`) and the broker URL.
 
 Setup reads every fragment in the folder and lists the models it found. For each model, it shows
 a real fragment drawn the way the site will show it:
-- **This site's template** means the site ships a template for the model (part 1, item 4).
+- **This site's template** means the site ships a template for the model (see [a look per model](#optional-a-look-per-model)).
 - Otherwise the model gets a starter template built from its fields, drawn with the generic
   `cf-card` block.
 
@@ -195,7 +239,7 @@ without waiting for AEM.
 
 | You see | What to do |
 |---|---|
-| **Live preview off** | Reload the page preview. If it stays off, check that `scripts.js` loads `cf-bridge.js` (part 1, step 2) and that the code is pushed |
+| **Live preview off** | Reload the page preview. If it stays off, check that `scripts.js` loads `cf-bridge.js` (run the installer again; it says "bridge already there") and that the code is pushed |
 | An environment you expect is missing in Setup | Your Adobe account has no access to it. Ask an AEM administrator for access, then open Setup again |
 | **Hibernated** environment | Wake it in Cloud Manager, then open Setup again |
 | **Browse with Content Advisor** does nothing | The library has no Content Advisor entry yet. Open Setup and save, or reload Experience Workspace once |
