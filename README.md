@@ -83,38 +83,48 @@ run by AEM's "Content Fragment published" event; it reads the fragment from AEM 
 DA with its own server-to-server credential. How it works, what it needs and how to deploy it:
 [architecture.md, The sync service](docs/architecture.md#the-sync-service).
 
-## Deploy a broker (any Adobe organization)
+## Run your own backend (any Adobe organization)
 
-Sites use a shared broker by default: the AEM XSC stage action,
-`https://3635370-dacontentfragments-stage.adobeioruntime.net/api/v1/web/da-cf/cf`. It only
-passes each user's own token to that user's own AEM author, so no data crosses organizations.
-An organization that wants to run its own broker deploys it to its own App Builder project:
+There are two server parts: the **broker** (the panel's way into AEM author) and the **sync
+service** (publishing in AEM updates the pages). Who needs what:
 
-1. In [Adobe Developer Console](https://developer.adobe.com/console), create a project in your
-   organization from the App Builder template (any name; it needs I/O Runtime), with a
-   workspace such as Stage or Production.
-2. Deploy from a clone of this repository:
+| You are | Panel (edit, Save, Publish) | Sync (publish in AEM updates pages) |
+|---|---|---|
+| AEM XSC (DA org `aemxsc`, AEM e1614585) | Install + Setup; uses the XSC broker | Already running for every aemxsc site that ran Setup |
+| Another team, partner or customer (your own Adobe org) | Works with the XSC broker by default; run your own for production | Needs your own: Adobe delivers AEM events only to a project in the same organization |
 
-   ```bash
-   aio login
-   aio console org select <your org id>
-   aio console project select <your project>
-   aio console workspace select <your workspace>
-   aio app use --global --no-input   # writes .env/.aio (git-ignored)
-   npm test
-   npm run deploy                    # zips actions/cf and updates the action; prints its URL
-   ```
+Your own backend is one command, run in an empty folder (it keeps a `.env` with the secrets
+there: keep the folder private, and run the command there again to update):
 
-3. Point sites at it: in the panel, **Setup** → **More settings** → broker, or the `broker` key in
-   the site's `content-fragments` config sheet.
+```bash
+npm install -g @adobe/aio-cli          # once
+aio login
+aio console org select <your org> && aio console project select <your App Builder project> && aio console workspace select <workspace>
+npx github:AEMXSC/da-content-fragments backend --da-org <your DA org>    # --dry-run first to see what it will do
+```
 
-The action is `da-cf/cf` in your workspace's namespace:
-`https://<namespace>.adobeioruntime.net/api/v1/web/da-cf/cf`. To allow more browser origins than
-the defaults, set the action input `ALLOWED_ORIGINS` (comma-separated regular expressions).
+It creates or reuses, in your organization only:
+1. the OAuth server-to-server credential `da-cf-sync` (Edge Delivery Services API) in that
+   workspace;
+2. a row in your DA org's `permissions` sheet letting its technical account write every site;
+3. an aem.live API key (role `publish`) for your org;
+4. the broker (`da-cf/cf`) and the sync service (`da-cf-sync/fragment-published`), deployed
+   to that workspace (`--no-broker` to keep using another broker).
 
-`aio app deploy` works too where its webpack build runs; on Windows with Node 26 it stalled at
-"Building actions". The action needs no bundling (two CommonJS files), so `npm run deploy`
-(`scripts/deploy.mjs`) zips `actions/cf` and updates the action directly.
+Two steps are left, and it prints them:
+1. **The event registration**, once per AEM environment: Developer Console → your project →
+   workspace → Add service → Event → AEM Sites → the environment → **Content Fragment
+   Published** → credential `da-cf-sync` → Runtime action `da-cf-sync/fragment-published`.
+2. **Your broker URL** in each site's panel: **Setup** → **More settings** → broker.
+
+What you need: an App Builder project in your org (any name, with I/O Runtime); the right to edit
+your DA org's config and the aem.live org config (the command signs you in with Adobe's
+da-auth-helper); AEM Eventing available for your AEM as a Cloud Service environment.
+
+Details: [architecture.md](docs/architecture.md) (the broker, the sync service). The broker's
+CORS origins can be widened with the action input `ALLOWED_ORIGINS` (comma-separated regular
+expressions). Manual deploys from a clone: `npm run deploy` (broker) and
+`node scripts/deploy-sync.mjs <DA org>` (sync service, reads `.env`: see `.env.example`).
 
 ## Install on a site
 

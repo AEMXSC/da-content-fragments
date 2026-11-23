@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  siteFrom, patchScripts, exportsOf, withIgnore, flatConfigIgnores, withLibraryRow,
+  siteFrom, patchScripts, exportsOf, withIgnore, flatConfigIgnores, withLibraryRow, withPermissionRow,
 } from '../bin/lib.mjs';
 
 test('siteFrom: fstab DA mountpoint first, then the git remote, lowercased', () => {
@@ -89,4 +89,20 @@ test('withLibraryRow: adds the row and keeps the rest, or null when present', ()
   assert.deepEqual(out.library.data, [{ title: 'Content Fragments', path: '/tools/content-fragments/index.html', experience: '' }]);
   assert.equal(withLibraryRow(out), null);
   assert.equal(withLibraryRow(null).library.data.length, 1);
+});
+
+test('withPermissionRow: adds the technical account for every site once, keeps the rest', () => {
+  const TECH = 'abc-123@techacct.adobe.com';
+  const raw = {
+    ':names': ['permissions', 'data'], permissions: { data: [{ path: 'CONFIG', groups: 'a@b.com', actions: 'write', comments: '' }] }, data: { data: [{ k: 1 }] },
+  };
+  const out = withPermissionRow(raw, TECH);
+  assert.deepEqual(out.data, raw.data);
+  assert.equal(out.permissions.data.length, 2);
+  assert.deepEqual(out.permissions.data[1], {
+    path: '/ + **', groups: TECH, actions: 'write', comments: 'da-content-fragments sync service (OAuth server to server)',
+  });
+  assert.equal(withPermissionRow(out, TECH), null);
+  assert.equal(withPermissionRow(null, TECH).permissions.data.length, 1);
+  assert.throws(() => withPermissionRow(raw, 'someone@example.com'));
 });

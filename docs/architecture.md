@@ -107,9 +107,11 @@ Every body also carries `author`.
 - **Data.** The broker only passes the user's own token to the user's own AEM, so no data
   crosses organizations.
 - **Operating cost.** Running the action and keeping it available is the AEM XSC team's job.
-- **Your own broker.** An organization that wants to run it deploys `actions/cf` to its own
-  App Builder project (see [Deploy the broker](#deploy-the-broker)). Then it sets `broker` under
-  **More settings** in Setup.
+- **Your own broker.** Another organization (an engineering team, a partner, a customer) runs
+  `npx github:AEMXSC/da-content-fragments backend --da-org <their DA org>` in its own App Builder
+  project. That deploys its own broker and sync service; see
+  [Run your own backend](../README.md#run-your-own-backend-any-adobe-organization). Sites then set
+  `broker` under **More settings** in Setup.
 
 ## Flows
 

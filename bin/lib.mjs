@@ -108,6 +108,27 @@ export function flatConfigIgnores(text = '') {
   return /['"`]tools\/(?:content-fragments\/?)?\*\*(?:\/\*)?['"`]/.test(text);
 }
 
+/**
+ * The DA org config with the sync service's technical account allowed to write every site
+ * (`/ + **`); null when a row already gives it that. Other rows and sheets are kept.
+ */
+export function withPermissionRow(raw, email) {
+  if (!/^[A-Za-z0-9-]+@techacct\.adobe\.com$/.test(email || '')) throw new Error('Not a technical account email.');
+  const rows = raw?.permissions?.data || [];
+  const has = rows.some((r) => r.path === '/ + **' && String(r.groups || '').split(',').map((g) => g.trim()).includes(email)
+    && String(r.actions || '').trim() === 'write');
+  if (has) return null;
+  const out = structuredClone(raw && raw[':names'] ? raw : { ':names': [], ':version': 3, ':type': 'multi-sheet' });
+  const columns = rows[0] ? Object.keys(rows[0]) : ['path', 'groups', 'actions', 'comments'];
+  const row = { path: '/ + **', groups: email, actions: 'write', comments: 'da-content-fragments sync service (OAuth server to server)' };
+  const data = [...rows, Object.fromEntries(columns.map((k) => [k, row[k] ?? '']))];
+  out.permissions = {
+    ...out.permissions, total: data.length, limit: data.length, offset: 0, data,
+  };
+  if (!out[':names'].includes('permissions')) out[':names'] = [...out[':names'], 'permissions'];
+  return out;
+}
+
 /** the site's DA config with the panel's library row added; null when it is already there */
 export function withLibraryRow(raw) {
   const rows = raw?.library?.data || [];
